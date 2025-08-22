@@ -11,8 +11,8 @@ import { Progress } from '@/components/ui/progress'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AspectRatio } from '@/components/ui/aspect-ratio'
-import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { useNotifications } from '@/hooks/useNotifications'
+import { getBrowserClient } from '@/lib/supabase/browser-client'
 import { Goal, Dream, GoalMilestone, GoalStats } from '@/types'
 import { 
   Target, 
@@ -91,6 +91,7 @@ const predefinedTags = [
 ]
 
 export function MetasSection() {
+  const supabase = getBrowserClient()
   // Datos de ejemplo para metas
   const defaultGoals: Goal[] = [
     {
@@ -492,8 +493,8 @@ export function MetasSection() {
     }
   ]
 
-  const { value: goals, setValue: setGoals } = useLocalStorage<Goal[]>('goals', defaultGoals)
-  const { value: dreams, setValue: setDreams } = useLocalStorage<Dream[]>('dreams', defaultDreams)
+  const [goals, setGoals] = useState<Goal[]>([])
+  const [dreams, setDreams] = useState<Dream[]>([])
   const { sendNotification } = useNotifications()
 
   const [activeTab, setActiveTab] = useState('metas')
@@ -506,6 +507,57 @@ export function MetasSection() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('Todas')
   const [selectedStatus, setSelectedStatus] = useState('Todas')
+  const [updatingGoal, setUpdatingGoal] = useState<Record<number, boolean>>({})
+  // Animación de éxito (confetti)
+  const fireConfetti = async () => {
+    try {
+      const mod = await import('canvas-confetti')
+      const shoot = mod.default
+      shoot({ particleCount: 90, spread: 70, origin: { y: 0.6 } })
+    } catch (e) {
+      // silencioso si la librería no está disponible
+    }
+  }
+  // Load data
+  useEffect(() => {
+    loadGoals()
+    loadDreams()
+  }, [])
+
+  const loadGoals = async () => {
+    const { data, error } = await supabase
+      .from('goals')
+      .select('*')
+      .order('createdAt', { ascending: false })
+    if (!error) setGoals(data as Goal[])
+  }
+
+  const loadDreams = async () => {
+    const { data, error } = await supabase
+      .from('dreams')
+      .select('*')
+      .order('createdAt', { ascending: false })
+    if (!error) setDreams(data as Dream[])
+  }
+
+  // Realtime subscriptions
+  useEffect(() => {
+    const goalsChannel = supabase
+      .channel('goals_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'goals' }, loadGoals)
+      .subscribe()
+
+    const dreamsChannel = supabase
+      .channel('dreams_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'dreams' }, loadDreams)
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(goalsChannel)
+      supabase.removeChannel(dreamsChannel)
+    }
+  }, [supabase])
+
 
   const [goalForm, setGoalForm] = useState({
     title: '',
@@ -569,32 +621,35 @@ export function MetasSection() {
     return matchesSearch && matchesCategory
   })
 
-  const addGoal = () => {
+  const addGoal = async () => {
     if (!goalForm.title) return
 
-    const newGoal: Goal = {
-      id: Date.now(),
+    const payload = {
       title: goalForm.title,
       description: goalForm.description,
       category: goalForm.category,
       type: goalForm.type,
       priority: goalForm.priority,
       status: 'pendiente',
-      targetDate: goalForm.targetDate,
+      targetDate: goalForm.targetDate || null,
       progress: 0,
       milestones: [],
-      budget: goalForm.budget,
-      location: goalForm.location,
+      budget: goalForm.budget || null,
+      location: goalForm.location || null,
       participants: goalForm.participants,
       tags: goalForm.tags,
-      notes: goalForm.notes,
+      notes: goalForm.notes || null,
       isPrivate: goalForm.isPrivate,
-      isFavorite: goalForm.isFavorite,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      isFavorite: goalForm.isFavorite
     }
 
-    setGoals([newGoal, ...goals])
+    const { error } = await supabase.from('goals').insert([payload])
+    if (error) {
+      console.error('Supabase insert goals error:', error.message, error.details)
+      alert('No se pudo crear la meta: ' + (error.message || 'Solicitud inválida'))
+      return
+    }
+    await loadGoals()
     setGoalForm({
       title: '',
       description: '',
@@ -614,29 +669,33 @@ export function MetasSection() {
 
     sendNotification({
       title: 'Nueva meta creada',
-      body: `Se ha creado la meta: ${newGoal.title}`
+      body: `Se ha creado la meta: ${payload.title}`
     })
   }
 
-  const addDream = () => {
+  const addDream = async () => {
     if (!dreamForm.title) return
 
-    const newDream: Dream = {
-      id: Date.now(),
+    const payload = {
       title: dreamForm.title,
       description: dreamForm.description,
       category: dreamForm.category,
       priority: dreamForm.priority,
-      estimatedCost: dreamForm.estimatedCost,
-      location: dreamForm.location,
+      estimatedCost: dreamForm.estimatedCost || null,
+      location: dreamForm.location || null,
       timeframe: dreamForm.timeframe,
       isShared: dreamForm.isShared,
       isAchieved: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      notes: dreamForm.notes || null
     }
 
-    setDreams([newDream, ...dreams])
+    const { error } = await supabase.from('dreams').insert([payload])
+    if (error) {
+      console.error('Supabase insert dreams error:', error.message, error.details)
+      alert('No se pudo crear el sueño: ' + (error.message || 'Solicitud inválida'))
+      return
+    }
+    await loadDreams()
     setDreamForm({
       title: '',
       description: '',
@@ -652,100 +711,109 @@ export function MetasSection() {
 
     sendNotification({
       title: 'Nuevo sueño agregado',
-      body: `Se ha agregado el sueño: ${newDream.title}`
+      body: `Se ha agregado el sueño: ${payload.title}`
     })
   }
 
-  const updateGoalProgress = (goalId: number, progress: number) => {
-    setGoals(goals.map(goal => 
-      goal.id === goalId 
-        ? { 
-            ...goal, 
-            progress,
-            status: progress >= 100 ? 'completado' : progress > 0 ? 'en_progreso' : 'pendiente',
-            completedDate: progress >= 100 ? new Date().toISOString() : goal.completedDate,
-            updatedAt: new Date().toISOString()
-          }
-        : goal
-    ))
+  const updateGoalProgress = async (goalId: number, progress: number) => {
+    if (updatingGoal[goalId]) return
+    setUpdatingGoal(prev => ({ ...prev, [goalId]: true }))
+    const status = progress >= 100 ? 'completado' : progress > 0 ? 'en_progreso' : 'pendiente'
+    const updates: Partial<Goal> = {
+      progress,
+      status,
+      completedDate: progress >= 100 ? new Date().toISOString() : undefined
+    }
+    const { error } = await supabase.from('goals').update(updates).eq('id', goalId)
+    if (error) {
+      console.error('Error updating goal progress', error)
+    }
+    await loadGoals()
+    setUpdatingGoal(prev => ({ ...prev, [goalId]: false }))
+    if (progress >= 100) {
+      fireConfetti()
+    }
   }
 
-  const toggleDreamAchieved = (dreamId: number) => {
-    setDreams(dreams.map(dream => 
-      dream.id === dreamId 
-        ? { 
-            ...dream, 
-            isAchieved: !dream.isAchieved,
-            achievedDate: !dream.isAchieved ? new Date().toISOString() : undefined,
-            updatedAt: new Date().toISOString()
-          }
-        : dream
-    ))
+  const toggleDreamAchieved = async (dreamId: number) => {
+    const dream = dreams.find(d => d.id === dreamId)
+    if (!dream) return
+    const { error } = await supabase
+      .from('dreams')
+      .update({ 
+        isAchieved: !dream.isAchieved,
+        achievedDate: !dream.isAchieved ? new Date().toISOString() : null
+      })
+      .eq('id', dreamId)
+    if (!error) await loadDreams()
+    if (!dream.isAchieved) {
+      fireConfetti()
+    }
   }
 
-  const deleteGoal = (goalId: number) => {
-    setGoals(goals.filter(goal => goal.id !== goalId))
+  const deleteGoal = async (goalId: number) => {
+    await supabase.from('goals').delete().eq('id', goalId)
+    await loadGoals()
   }
 
-  const deleteDream = (dreamId: number) => {
-    setDreams(dreams.filter(dream => dream.id !== dreamId))
+  const deleteDream = async (dreamId: number) => {
+    await supabase.from('dreams').delete().eq('id', dreamId)
+    await loadDreams()
   }
 
-  const editGoal = () => {
+  const editGoal = async () => {
     if (!selectedGoal || !goalForm.title) return
 
-    const updatedGoal: Goal = {
-      ...selectedGoal,
+    const updates = {
       title: goalForm.title,
       description: goalForm.description,
       category: goalForm.category,
       type: goalForm.type,
       priority: goalForm.priority,
-      targetDate: goalForm.targetDate,
-      budget: goalForm.budget,
-      location: goalForm.location,
+      targetDate: goalForm.targetDate || null,
+      budget: goalForm.budget || null,
+      location: goalForm.location || null,
       participants: goalForm.participants,
       tags: goalForm.tags,
-      notes: goalForm.notes,
+      notes: goalForm.notes || null,
       isPrivate: goalForm.isPrivate,
-      isFavorite: goalForm.isFavorite,
-      updatedAt: new Date().toISOString()
+      isFavorite: goalForm.isFavorite
     }
 
-    setGoals(goals.map(goal => goal.id === selectedGoal.id ? updatedGoal : goal))
+    await supabase.from('goals').update(updates).eq('id', selectedGoal.id)
+    await loadGoals()
     setShowEditGoalDialog(false)
     setSelectedGoal(null)
 
     sendNotification({
       title: 'Meta actualizada',
-      body: `Se ha actualizado la meta: ${updatedGoal.title}`
+      body: `Se ha actualizado la meta: ${goalForm.title}`
     })
   }
 
-  const editDream = () => {
+  const editDream = async () => {
     if (!selectedDream || !dreamForm.title) return
 
-    const updatedDream: Dream = {
-      ...selectedDream,
+    const updates = {
       title: dreamForm.title,
       description: dreamForm.description,
       category: dreamForm.category,
       priority: dreamForm.priority,
-      estimatedCost: dreamForm.estimatedCost,
-      location: dreamForm.location,
+      estimatedCost: dreamForm.estimatedCost || null,
+      location: dreamForm.location || null,
       timeframe: dreamForm.timeframe,
       isShared: dreamForm.isShared,
-      notes: dreamForm.notes,
-      updatedAt: new Date().toISOString()
+      notes: dreamForm.notes || null
     }
 
-    setDreams(dreams.map(dream => dream.id === selectedDream.id ? updatedDream : dream))
+    await supabase.from('dreams').update(updates).eq('id', selectedDream.id)
+    await loadDreams()
     setShowEditDreamDialog(false)
     setSelectedDream(null)
 
     sendNotification({
       title: 'Sueño actualizado',
-      body: `Se ha actualizado el sueño: ${updatedDream.title}`
+      body: `Se ha actualizado el sueño: ${dreamForm.title}`
     })
   }
 
@@ -1002,7 +1070,9 @@ export function MetasSection() {
                         <span>Progreso</span>
                         <span>{goal.progress}%</span>
                       </div>
-                      <Progress value={goal.progress} className="h-2" />
+                      <div className="h-2">
+  <Progress value={goal.progress} />
+</div>
                     </div>
 
                     {/* Información adicional */}
@@ -1033,6 +1103,7 @@ export function MetasSection() {
                         variant="outline"
                         size="sm"
                         onClick={() => {
+                          if (updatingGoal[goal.id]) return
                           const newProgress = Math.min(goal.progress + 25, 100)
                           updateGoalProgress(goal.id, newProgress)
                         }}

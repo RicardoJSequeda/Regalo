@@ -56,9 +56,11 @@ import {
   Image as ImageIcon,
   Video,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  PlayCircle,
+  Heart
 } from 'lucide-react'
-import { useLocalStorage } from '@/hooks/useLocalStorage'
+import { getBrowserClient } from '@/lib/supabase/browser-client'
 
 // Predefined tag options
 const predefinedTags = [
@@ -75,72 +77,81 @@ const predefinedTags = [
 // Initial dummy data
 const defaultPhotos: Photo[] = [
   {
-    id: 1,
+    id: '1',
     title: 'Nuestra Primera Cita',
-    date: '2024-01-15',
+    date_taken: '2024-01-15',
     description: 'El día que todo comenzó. Un momento mágico que nunca olvidaremos.',
-    image: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=400&h=300&fit=crop',
+    image_url: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=400&h=300&fit=crop',
+    file_type: 'image',
+    category: 'romantico',
     tags: ['cita', 'romántico', 'especial'],
-    type: 'photo',
-    size: 2048576,
-    createdAt: '2024-01-15T10:00:00Z',
-    updatedAt: '2024-01-15T10:00:00Z'
+    favorite: true,
+    created_at: '2024-01-15T10:00:00Z',
+    updated_at: '2024-01-15T10:00:00Z'
   },
   {
-    id: 2,
+    id: '2',
     title: 'Viaje a la Playa',
-    date: '2024-02-20',
+    date_taken: '2024-02-20',
     description: 'Arena, mar y mucho amor. Un día perfecto juntos.',
-    image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&h=300&fit=crop',
+    image_url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&h=300&fit=crop',
+    file_type: 'image',
+    category: 'viajes',
     tags: ['playa', 'viaje', 'naturaleza'],
-    type: 'photo',
-    size: 3145728,
-    createdAt: '2024-02-20T14:30:00Z',
-    updatedAt: '2024-02-20T14:30:00Z'
+    favorite: false,
+    created_at: '2024-02-20T14:30:00Z',
+    updated_at: '2024-02-20T14:30:00Z'
   },
   {
-    id: 3,
+    id: '3',
     title: 'Cena Romántica',
-    date: '2024-03-10',
+    date_taken: '2024-03-10',
     description: 'Una velada inolvidable con la mejor compañía.',
-    image: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400&h=300&fit=crop',
+    image_url: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400&h=300&fit=crop',
+    file_type: 'image',
+    category: 'romantico',
     tags: ['cena', 'romántico', 'restaurante'],
-    type: 'photo',
-    size: 1572864,
-    createdAt: '2024-03-10T20:00:00Z',
-    updatedAt: '2024-03-10T20:00:00Z'
+    favorite: false,
+    created_at: '2024-03-10T20:00:00Z',
+    updated_at: '2024-03-10T20:00:00Z'
   },
   {
-    id: 4,
+    id: '4',
     title: 'Video del Aniversario',
-    date: '2024-04-05',
+    date_taken: '2024-04-05',
     description: 'Celebrando nuestro amor con risas y alegría.',
-    image: 'https://images.unsplash.com/photo-1518709268805-4e9042af2176?w=400&h=300&fit=crop',
+    image_url: 'https://images.unsplash.com/photo-1518709268805-4e9042af2176?w=400&h=300&fit=crop',
+    file_type: 'video',
+    category: 'romantico',
     tags: ['aniversario', 'video', 'celebración'],
-    type: 'video',
-    size: 52428800,
-    createdAt: '2024-04-05T18:00:00Z',
-    updatedAt: '2024-04-05T18:00:00Z'
+    favorite: true,
+    created_at: '2024-04-05T18:00:00Z',
+    updated_at: '2024-04-05T18:00:00Z'
   }
 ]
 
 export default function FotosSection() {
-  const { value: photos, setValue: setPhotos } = useLocalStorage<Photo[]>('photos', defaultPhotos)
+  const [photos, setPhotos] = useState<Photo[]>([])
   const [filteredPhotos, setFilteredPhotos] = useState<Photo[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState<'date' | 'title' | 'type'>('date')
-  const [filterType, setFilterType] = useState<'all' | 'photo' | 'video'>('all')
+  const [filterType, setFilterType] = useState<'all' | 'image' | 'video' | 'gif'>('all')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null)
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [videoDurations, setVideoDurations] = useState<Record<string, number>>({})
+  const [videoPosters, setVideoPosters] = useState<Record<string, string>>({})
+  const [modalSize, setModalSize] = useState<'default' | 'wide' | 'tall'>('default')
   const [toast, setToast] = useState<{
     show: boolean
     title: string
     description: string
     variant?: 'default' | 'destructive'
   }>({ show: false, title: '', description: '' })
+
+  const supabase = getBrowserClient()
 
   // Auto-hide toast after 3 seconds
   useEffect(() => {
@@ -158,23 +169,111 @@ export default function FotosSection() {
     date: '',
     description: '',
     tags: [] as string[],
-    type: 'photo' as 'photo' | 'video',
+    file_type: 'image' as 'image' | 'video' | 'gif',
     image: null as File | null
   })
 
-  // Load photos from localStorage
+  // Load photos from Supabase
   useEffect(() => {
-    setLoading(false)
+    loadPhotos()
   }, [])
+
+  const loadPhotos = async () => {
+    try {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('photos')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('Error loading photos:', error)
+        setToast({
+          show: true,
+          title: 'Error',
+          description: 'Error al cargar las fotos',
+          variant: 'destructive'
+        })
+        return
+      }
+
+      setPhotos(data || [])
+      
+      // Cargar duraciones de videos
+      const videoPhotos = data?.filter(photo => photo.file_type === 'video') || []
+      const durations: Record<string, number> = {}
+      
+      videoPhotos.forEach(photo => {
+        const video = document.createElement('video')
+        video.src = photo.image_url
+        video.addEventListener('loadedmetadata', () => {
+          durations[photo.id] = video.duration
+          setVideoDurations(prev => ({ ...prev, [photo.id]: video.duration }))
+        })
+      })
+
+      // Generar posters estáticos (thumbnail) de forma client-side
+      videoPhotos.forEach(photo => {
+        try {
+          const video = document.createElement('video')
+          video.crossOrigin = 'anonymous'
+          video.src = photo.image_url
+          video.preload = 'metadata'
+          video.addEventListener('loadeddata', () => {
+            try {
+              const canvas = document.createElement('canvas')
+              canvas.width = video.videoWidth
+              canvas.height = video.videoHeight
+              const ctx = canvas.getContext('2d')
+              ctx?.drawImage(video, 0, 0, canvas.width, canvas.height)
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
+              setVideoPosters(prev => ({ ...prev, [photo.id]: dataUrl }))
+            } catch (err) {
+              // Ignorar si el navegador bloquea por CORS
+            }
+          })
+        } catch (err) {
+          // Silencioso si falla la generación
+        }
+      })
+    } catch (error) {
+      console.error('Error loading photos:', error)
+      setToast({
+        show: true,
+        title: 'Error',
+        description: 'Error al cargar las fotos',
+        variant: 'destructive'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Suscripción en tiempo real
+  useEffect(() => {
+    const channel = supabase
+      .channel('photos_changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'photos' }, 
+        () => {
+          loadPhotos()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [supabase])
 
   // Filter and sort photos
   useEffect(() => {
     let filtered = photos.filter(photo => {
       const matchesSearch = photo.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           photo.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           (photo.description && photo.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
                            photo.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
       
-      const matchesType = filterType === 'all' || photo.type === filterType
+      const matchesType = filterType === 'all' || photo.file_type === filterType
       
       return matchesSearch && matchesType
     })
@@ -183,11 +282,11 @@ export default function FotosSection() {
     filtered.sort((a, b) => {
       switch (sortBy) {
         case 'date':
-          return new Date(b.date).getTime() - new Date(a.date).getTime()
+          return new Date(b.date_taken || '').getTime() - new Date(a.date_taken || '').getTime()
         case 'title':
           return a.title.localeCompare(b.title)
         case 'type':
-          return a.type.localeCompare(b.type)
+          return a.file_type.localeCompare(b.file_type)
         default:
           return 0
       }
@@ -203,7 +302,7 @@ export default function FotosSection() {
     }
   }, [photos])
 
-  const handleCreatePhoto = () => {
+  const handleCreatePhoto = async () => {
     if (!photoForm.title || !photoForm.date || !photoForm.image) {
       setToast({
         show: true,
@@ -214,43 +313,119 @@ export default function FotosSection() {
       return
     }
 
-    const newPhoto: Photo = {
-      id: Date.now(),
-      title: photoForm.title,
-      date: photoForm.date,
-      description: photoForm.description,
-      image: URL.createObjectURL(photoForm.image),
-      tags: photoForm.tags,
-      type: photoForm.type,
-      size: photoForm.image.size,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
+    try {
+      // Subir imagen a Supabase Storage
+      const imageFile = photoForm.image
+      const safeName = imageFile.name.replace(/[^a-zA-Z0-9.\-_]/g, '-').toLowerCase()
+      const key = `photos/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}`
+      
+      const { error: uploadError } = await supabase.storage
+        .from('photos')
+        .upload(key, imageFile, {
+          cacheControl: '3600',
+          upsert: false
+        })
 
-    setPhotos(prev => [newPhoto, ...prev])
-    setShowCreateModal(false)
-    resetForm()
-    setToast({
-      show: true,
-      title: 'Éxito',
-      description: 'Foto agregada correctamente'
-    })
+      if (uploadError) {
+        throw uploadError
+      }
+
+      // Obtener URL pública
+      const { data: urlData } = supabase.storage
+        .from('photos')
+        .getPublicUrl(key)
+
+      // Detectar tipo de archivo automáticamente
+      const fileType = imageFile.type.startsWith('video/') ? 'video' : 
+                      imageFile.type === 'image/gif' ? 'gif' : 'image'
+
+      // Generar thumbnail para videos si es necesario
+      let thumbnailUrl = null
+      if (fileType === 'video') {
+        try {
+          const video = document.createElement('video')
+          video.src = URL.createObjectURL(imageFile)
+          video.currentTime = 0.1
+          
+          const canvas = document.createElement('canvas')
+          const ctx = canvas.getContext('2d')
+          
+          video.addEventListener('loadeddata', () => {
+            canvas.width = video.videoWidth
+            canvas.height = video.videoHeight
+            ctx?.drawImage(video, 0, 0)
+            
+            canvas.toBlob(async (blob) => {
+              if (blob) {
+                const thumbnailKey = `thumbnails/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-thumb.jpg`
+                await supabase.storage.from('photos').upload(thumbnailKey, blob)
+                const { data: thumbData } = supabase.storage.from('photos').getPublicUrl(thumbnailKey)
+                thumbnailUrl = thumbData.publicUrl
+              }
+            }, 'image/jpeg', 0.8)
+          })
+        } catch (error) {
+          console.warn('No se pudo generar thumbnail del video:', error)
+        }
+      }
+
+      // Crear registro en la base de datos
+      const photoData: any = {
+        title: photoForm.title,
+        description: photoForm.description || null,
+        image_url: urlData.publicUrl,
+        thumbnail_url: thumbnailUrl,
+        file_type: fileType,
+        category: 'otro', // Por defecto
+        tags: photoForm.tags,
+        location: null,
+        date_taken: photoForm.date,
+        favorite: false
+      }
+
+      const { data, error } = await supabase
+        .from('photos')
+        .insert([photoData])
+        .select()
+        .single()
+
+      if (error) {
+        throw error
+      }
+
+      setShowCreateModal(false)
+      resetForm()
+      await loadPhotos() // Recargar fotos
+      setToast({
+        show: true,
+        title: 'Éxito',
+        description: 'Foto agregada correctamente'
+      })
+    } catch (error) {
+      console.error('Error creating photo:', error)
+      setToast({
+        show: true,
+        title: 'Error',
+        description: 'Error al crear la foto',
+        variant: 'destructive'
+      })
+    }
   }
 
   const handleEditPhoto = (photo: Photo) => {
     setSelectedPhoto(photo)
     setPhotoForm({
       title: photo.title,
-      date: photo.date,
-      description: photo.description,
+      date: photo.date_taken || '',
+      description: photo.description || '',
       tags: photo.tags,
-      type: photo.type,
+      file_type: photo.file_type,
       image: null
     })
     setShowCreateModal(true)
   }
 
-  const handleUpdatePhoto = () => {
+  const handleUpdatePhoto = async () => {
     if (!selectedPhoto || !photoForm.title || !photoForm.date) {
       setToast({
         show: true,
@@ -261,41 +436,134 @@ export default function FotosSection() {
       return
     }
 
-    const updatedPhoto: Photo = {
-      ...selectedPhoto,
-      title: photoForm.title,
-      date: photoForm.date,
-      description: photoForm.description,
-      tags: photoForm.tags,
-      type: photoForm.type,
-      image: photoForm.image ? URL.createObjectURL(photoForm.image) : selectedPhoto.image,
-      size: photoForm.image ? photoForm.image.size : selectedPhoto.size,
-      updatedAt: new Date().toISOString()
-    }
+    try {
+      let imageUrl = selectedPhoto.image_url
 
-    setPhotos(prev => prev.map(p => p.id === selectedPhoto.id ? updatedPhoto : p))
-    setShowCreateModal(false)
-    setSelectedPhoto(null)
-    resetForm()
-    setToast({
-      show: true,
-      title: 'Éxito',
-      description: 'Foto actualizada correctamente'
-    })
+      // Si hay una nueva imagen, subirla
+      if (photoForm.image) {
+        // Subir nueva imagen a Supabase Storage
+        const imageFile = photoForm.image
+        const safeName = imageFile.name.replace(/[^a-zA-Z0-9.\-_]/g, '-').toLowerCase()
+        const key = `photos/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}`
+        
+        const { error: uploadError } = await supabase.storage
+          .from('photos')
+          .upload(key, imageFile, {
+            cacheControl: '3600',
+            upsert: false
+          })
+
+        if (uploadError) {
+          throw uploadError
+        }
+
+        // Obtener URL pública de la nueva imagen
+        const { data: urlData } = supabase.storage
+          .from('photos')
+          .getPublicUrl(key)
+
+        imageUrl = urlData.publicUrl
+
+        // Si es video, intentar generar y actualizar thumbnail_url
+        if (imageFile.type.startsWith('video/')) {
+          try {
+            const tmpVideo = document.createElement('video')
+            tmpVideo.src = URL.createObjectURL(imageFile)
+            tmpVideo.currentTime = 0.1
+            const canvas = document.createElement('canvas')
+            const ctx = canvas.getContext('2d')
+            tmpVideo.addEventListener('loadeddata', async () => {
+              canvas.width = tmpVideo.videoWidth
+              canvas.height = tmpVideo.videoHeight
+              ctx?.drawImage(tmpVideo, 0, 0)
+              canvas.toBlob(async (blob) => {
+                if (!blob) return
+                const thumbnailKey = `thumbnails/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-thumb.jpg`
+                await supabase.storage.from('photos').upload(thumbnailKey, blob)
+                const { data: thumbData } = supabase.storage.from('photos').getPublicUrl(thumbnailKey)
+                updateData.thumbnail_url = thumbData.publicUrl
+              }, 'image/jpeg', 0.8)
+            })
+          } catch {}
+        }
+      }
+
+      // Actualizar registro en la base de datos
+      const updateData: any = {
+        title: photoForm.title,
+        description: photoForm.description || null,
+        image_url: imageUrl,
+        file_type: photoForm.file_type,
+        category: selectedPhoto.category, // Mantener categoría actual
+        tags: photoForm.tags,
+        location: selectedPhoto.location,
+        date_taken: photoForm.date,
+        favorite: selectedPhoto.favorite // Mantener estado de favorito
+      }
+
+      const { data, error } = await supabase
+        .from('photos')
+        .update(updateData)
+        .eq('id', selectedPhoto.id)
+        .select()
+        .single()
+
+      if (error) {
+        throw error
+      }
+
+      setShowCreateModal(false)
+      setSelectedPhoto(null)
+      resetForm()
+      await loadPhotos() // Recargar fotos
+      setToast({
+        show: true,
+        title: 'Éxito',
+        description: 'Foto actualizada correctamente'
+      })
+    } catch (error) {
+      console.error('Error updating photo:', error)
+      setToast({
+        show: true,
+        title: 'Error',
+        description: 'Error al actualizar la foto',
+        variant: 'destructive'
+      })
+    }
   }
 
-  const handleDeletePhoto = (photo: Photo) => {
-    setPhotos(prev => prev.filter(p => p.id !== photo.id))
-    setToast({
-      show: true,
-      title: 'Éxito',
-      description: 'Foto eliminada correctamente'
-    })
+  const handleDeletePhoto = async (photo: Photo) => {
+    try {
+      const { error } = await supabase
+        .from('photos')
+        .delete()
+        .eq('id', photo.id)
+
+      if (error) {
+        throw error
+      }
+
+      await loadPhotos() // Recargar fotos
+      setToast({
+        show: true,
+        title: 'Éxito',
+        description: 'Foto eliminada correctamente'
+      })
+    } catch (error) {
+      console.error('Error deleting photo:', error)
+      setToast({
+        show: true,
+        title: 'Error',
+        description: 'Error al eliminar la foto',
+        variant: 'destructive'
+      })
+    }
   }
 
   const handleViewPhoto = (photo: Photo) => {
     setSelectedPhoto(photo)
     setCurrentPhotoIndex(filteredPhotos.findIndex(p => p.id === photo.id))
+    setModalSize('default') // Reset modal size
     setShowDetailModal(true)
   }
 
@@ -303,6 +571,7 @@ export default function FotosSection() {
     if (currentPhotoIndex > 0) {
       setCurrentPhotoIndex(currentPhotoIndex - 1)
       setSelectedPhoto(filteredPhotos[currentPhotoIndex - 1])
+      setModalSize('default') // Reset modal size for new photo
     }
   }
 
@@ -310,13 +579,14 @@ export default function FotosSection() {
     if (currentPhotoIndex < filteredPhotos.length - 1) {
       setCurrentPhotoIndex(currentPhotoIndex + 1)
       setSelectedPhoto(filteredPhotos[currentPhotoIndex + 1])
+      setModalSize('default') // Reset modal size for new photo
     }
   }
 
   const handleDownload = (photo: Photo) => {
     const link = document.createElement('a')
-    link.href = photo.image
-    link.download = `${photo.title}.${photo.type === 'video' ? 'mp4' : 'jpg'}`
+          link.href = photo.image_url
+          link.download = `${photo.title}.${photo.file_type === 'video' ? 'mp4' : 'jpg'}`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -334,7 +604,7 @@ export default function FotosSection() {
       date: '',
       description: '',
       tags: [],
-      type: 'photo',
+      file_type: 'image',
       image: null
     })
   }
@@ -379,6 +649,12 @@ export default function FotosSection() {
       month: 'long',
       day: 'numeric'
     })
+  }
+
+  const formatDuration = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = Math.floor(seconds % 60)
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
   }
 
   if (loading) {
@@ -434,15 +710,16 @@ export default function FotosSection() {
               className="pl-10"
             />
           </div>
-          <Select value={filterType} onValueChange={(value: 'all' | 'photo' | 'video') => setFilterType(value)}>
+          <Select value={filterType} onValueChange={(value: 'all' | 'image' | 'video' | 'gif') => setFilterType(value)}>
             <SelectTrigger className="w-full sm:w-48">
               <Filter className="w-4 h-4 mr-2" />
               <SelectValue placeholder="Filtrar por tipo" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="photo">Fotos</SelectItem>
-              <SelectItem value="video">Videos</SelectItem>
+              <SelectItem value="image">Imágenes</SelectItem>
+                              <SelectItem value="video">Videos</SelectItem>
+                <SelectItem value="gif">GIFs</SelectItem>
             </SelectContent>
           </Select>
           <Select value={sortBy} onValueChange={(value: 'date' | 'title' | 'type') => setSortBy(value)}>
@@ -457,7 +734,7 @@ export default function FotosSection() {
           </Select>
         </div>
 
-        {/* Photos Grid */}
+        {/* Photos Grid - Pinterest Style */}
         {filteredPhotos.length === 0 ? (
           <div className="text-center py-12">
             <ImageIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -472,97 +749,111 @@ export default function FotosSection() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="masonry-grid">
             {filteredPhotos.map((photo) => (
-              <Card key={photo.id} className="group hover:shadow-lg transition-shadow">
-                <CardHeader className="p-0">
+              <div key={photo.id} className="masonry-item group relative">
+                <div className="photo-card">
+                  {/* Image/Video Container */}
                   <div className="relative">
-                    <AspectRatio ratio={4/3}>
-                      <img
-                        src={photo.image}
-                        alt={photo.title}
-                        className="object-cover w-full h-full rounded-t-lg"
+                    {photo.file_type === 'video' ? (
+                      <video
+                        src={photo.image_url}
+                        className="w-full h-auto rounded-lg object-cover"
+                        preload="metadata"
+                        muted
+                        playsInline
+                        poster={videoPosters[photo.id] || photo.thumbnail_url || `${photo.image_url}#t=0.5`}
+                        onLoadedMetadata={(e) => {
+                          const video = e.target as HTMLVideoElement
+                          video.style.aspectRatio = `${video.videoWidth}/${video.videoHeight}`
+                        }}
                       />
-                    </AspectRatio>
-                    <div className="absolute top-2 right-2">
-                      <Badge variant={photo.type === 'video' ? 'secondary' : 'default'}>
-                        {photo.type === 'video' ? <Video className="w-3 h-3 mr-1" /> : <ImageIcon className="w-3 h-3 mr-1" />}
-                        {photo.type === 'video' ? 'Video' : 'Foto'}
-                      </Badge>
-                    </div>
-                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => handleViewPhoto(photo)}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => handleEditPhoto(photo)}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button size="sm" variant="destructive">
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>¿Eliminar foto?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Esta acción no se puede deshacer. La foto se eliminará permanentemente.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => handleDeletePhoto(photo)}
-                                className="bg-red-600 hover:bg-red-700"
-                              >
-                                Eliminar
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-4">
-                  <CardTitle className="text-lg mb-2 line-clamp-1">{photo.title}</CardTitle>
-                  <div className="flex items-center text-sm text-gray-500 mb-2">
-                    <Calendar className="w-4 h-4 mr-1" />
-                    {formatDate(photo.date)}
-                  </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-3 line-clamp-2">
-                    {photo.description}
-                  </p>
-                  <div className="flex flex-wrap gap-1 mb-3">
-                    {photo.tags.slice(0, 3).map((tag, index) => (
-                      <Badge key={index} variant="outline" className="text-xs">
-                        <Tag className="w-3 h-3 mr-1" />
-                        {tag}
-                      </Badge>
-                    ))}
-                    {photo.tags.length > 3 && (
-                      <Badge variant="outline" className="text-xs">
-                        +{photo.tags.length - 3}
-                      </Badge>
+                    ) : (
+                      <img
+                        src={photo.image_url}
+                        alt={photo.title}
+                        className="w-full h-auto rounded-lg object-cover"
+                        loading="lazy"
+                      />
                     )}
+
+
+
+                    {/* Video Duration Badge */}
+                    {photo.file_type === 'video' && (
+                      <div className="absolute bottom-3 right-3">
+                        <div className="bg-black/80 backdrop-blur-sm rounded-lg px-2.5 py-1.5 shadow-lg">
+                          <span className="text-xs text-white font-semibold">
+                            <Video className="w-3 h-3 inline mr-1" />
+                            {videoDurations[photo.id] ? formatDuration(videoDurations[photo.id]) : 'Video'}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                     {/* Favorite Badge */}
+                     {photo.favorite && (
+                       <div className="absolute top-3 left-3">
+                         <div className="bg-red-500 rounded-full p-1.5">
+                           <Heart className="w-4 h-4 text-white fill-current" />
+                         </div>
+                       </div>
+                     )}
+
+                     {/* Hover Overlay with Actions */}
+                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
+                       <div className="flex gap-2 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-200">
+                         <Button
+                           size="sm"
+                           variant="secondary"
+                           className="bg-white/95 backdrop-blur-sm hover:bg-white shadow-lg"
+                           onClick={() => handleViewPhoto(photo)}
+                         >
+                           <Eye className="w-4 h-4" />
+                         </Button>
+                         <Button
+                           size="sm"
+                           variant="secondary"
+                           className="bg-white/95 backdrop-blur-sm hover:bg-white shadow-lg"
+                           onClick={() => handleEditPhoto(photo)}
+                         >
+                           <Edit className="w-4 h-4" />
+                         </Button>
+                         <AlertDialog>
+                           <AlertDialogTrigger asChild>
+                             <Button 
+                               size="sm" 
+                               variant="destructive"
+                               className="bg-red-500/95 backdrop-blur-sm hover:bg-red-600 shadow-lg"
+                             >
+                               <Trash2 className="w-4 h-4" />
+                             </Button>
+                           </AlertDialogTrigger>
+                           <AlertDialogContent>
+                             <AlertDialogHeader>
+                               <AlertDialogTitle>¿Eliminar foto?</AlertDialogTitle>
+                               <AlertDialogDescription>
+                                 Esta acción no se puede deshacer. La foto se eliminará permanentemente.
+                               </AlertDialogDescription>
+                             </AlertDialogHeader>
+                             <AlertDialogFooter>
+                               <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                               <AlertDialogAction
+                                 onClick={() => handleDeletePhoto(photo)}
+                                 className="bg-red-600 hover:bg-red-700"
+                               >
+                                 Eliminar
+                               </AlertDialogAction>
+                             </AlertDialogFooter>
+                           </AlertDialogContent>
+                         </AlertDialog>
+                       </div>
+                     </div>
                   </div>
-                  {photo.size && (
-                    <p className="text-xs text-gray-500">
-                      {formatFileSize(photo.size)}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
+
+                  
+                </div>
+              </div>
             ))}
           </div>
         )}
@@ -608,8 +899,8 @@ export default function FotosSection() {
               <div>
                 <label className="text-sm font-medium mb-2 block">Tipo</label>
                 <Select
-                  value={photoForm.type}
-                  onValueChange={(value: 'photo' | 'video') => setPhotoForm(prev => ({ ...prev, type: value }))}
+                  value={photoForm.file_type}
+                                      onValueChange={(value: 'image' | 'video' | 'gif') => setPhotoForm(prev => ({ ...prev, file_type: value }))}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -712,11 +1003,17 @@ export default function FotosSection() {
                   <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors">
                     <input
                       type="file"
-                      accept={photoForm.type === 'video' ? 'video/*' : 'image/*'}
+                      accept="image/*,video/*"
                       onChange={(e) => {
                         const file = e.target.files?.[0]
                         if (file && file.size <= 100 * 1024 * 1024) { // 100MB max
-                          setPhotoForm(prev => ({ ...prev, image: file }))
+                          const detectedType = file.type.startsWith('video/') ? 'video' : 
+                                             file.type === 'image/gif' ? 'gif' : 'image'
+                          setPhotoForm(prev => ({ 
+                            ...prev, 
+                            image: file, 
+                            file_type: detectedType 
+                          }))
                         } else if (file) {
                           alert('El archivo es demasiado grande. Máximo 100MB.')
                         }
@@ -726,7 +1023,7 @@ export default function FotosSection() {
                     />
                     <label htmlFor="file-upload" className="cursor-pointer">
                       <div className="space-y-3">
-                        {photoForm.type === 'video' ? (
+                        {photoForm.file_type === 'video' ? (
                           <Video className="h-12 w-12 text-gray-400 mx-auto" />
                         ) : (
                           <ImageIcon className="h-12 w-12 text-gray-400 mx-auto" />
@@ -736,7 +1033,7 @@ export default function FotosSection() {
                             Haz clic para seleccionar un archivo
                           </p>
                           <p className="text-sm text-gray-500 mt-1">
-                            {photoForm.type === 'video' ? 'MP4, AVI, MOV' : 'JPG, PNG, GIF'} (máx. 100MB)
+                            {photoForm.file_type === 'video' ? 'MP4, AVI, MOV' : 'JPG, PNG, GIF'} (máx. 100MB)
                           </p>
                         </div>
                       </div>
@@ -748,7 +1045,7 @@ export default function FotosSection() {
                     <div className="border-2 border-dashed border-green-200 bg-green-50 rounded-lg p-4">
                       <div className="flex items-center space-x-3">
                         <div className="flex-shrink-0">
-                          {photoForm.type === 'video' ? (
+                          {photoForm.file_type === 'video' ? (
                             <Video className="w-8 h-8 text-green-600" />
                           ) : (
                             <ImageIcon className="w-8 h-8 text-green-600" />
@@ -759,7 +1056,7 @@ export default function FotosSection() {
                             {photoForm.image.name}
                           </p>
                           <p className="text-xs text-green-700">
-                            {formatFileSize(photoForm.image.size)} • {photoForm.type === 'video' ? 'Video' : 'Imagen'}
+                            {formatFileSize(photoForm.image.size)} • {photoForm.file_type === 'video' ? 'Video' : 'Imagen'}
                           </p>
                         </div>
                         <Button
@@ -777,7 +1074,7 @@ export default function FotosSection() {
                     {/* File preview */}
                     <div className="relative">
                       <AspectRatio ratio={4/3} className="max-h-48">
-                        {photoForm.type === 'video' ? (
+                        {photoForm.file_type === 'video' ? (
                           <video
                             src={URL.createObjectURL(photoForm.image)}
                             controls
@@ -817,26 +1114,61 @@ export default function FotosSection() {
         </Dialog>
 
         {/* Detail Modal */}
-        <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
-          <DialogContent className="max-w-4xl">
+        <Dialog open={showDetailModal} onOpenChange={(open) => {
+          setShowDetailModal(open)
+          if (!open) {
+            // Resetear el tamaño del modal cuando se cierre
+            setModalSize('default')
+          }
+        }}>
+          <DialogContent className={`transition-all duration-300 ease-in-out ${
+            modalSize === 'wide' ? 'max-w-[95vw] w-auto' :
+            modalSize === 'tall' ? 'max-w-[50vw] w-auto' :
+            'max-w-4xl'
+          }`}>
             {selectedPhoto && (
               <div className="space-y-4">
-                <div className="relative">
-                  <AspectRatio ratio={16/9}>
-                    {selectedPhoto.type === 'video' ? (
-                      <video
-                        src={selectedPhoto.image}
-                        controls
-                        className="w-full h-full rounded-lg"
-                      />
-                    ) : (
-                      <img
-                        src={selectedPhoto.image}
-                        alt={selectedPhoto.title}
-                        className="w-full h-full object-cover rounded-lg"
-                      />
-                    )}
-                  </AspectRatio>
+                                <div className="relative">
+                  {selectedPhoto.file_type === 'video' ? (
+                    <video
+                      src={selectedPhoto.image_url}
+                      controls
+                      autoPlay
+                      className="w-full h-auto max-h-[70vh] rounded-lg object-contain"
+                                              onLoadedMetadata={(e) => {
+                          // Asegurar que el video se reproduzca correctamente
+                          const video = e.target as HTMLVideoElement
+                          video.volume = 0.5
+                          // Ajustar el modal al aspect ratio del video
+                          const aspectRatio = video.videoWidth / video.videoHeight
+                          if (aspectRatio > 1.5) {
+                            setModalSize('wide') // Video muy horizontal
+                          } else if (aspectRatio < 0.7) {
+                            setModalSize('tall') // Video muy vertical
+                          } else {
+                            setModalSize('default') // Aspect ratio normal
+                          }
+                        }}
+                    />
+                  ) : (
+                    <img
+                      src={selectedPhoto.image_url}
+                      alt={selectedPhoto.title}
+                      className="w-full h-auto max-h-[70vh] rounded-lg object-contain"
+                      onLoad={(e) => {
+                        // Ajustar el modal al aspect ratio de la imagen
+                        const img = e.target as HTMLImageElement
+                        const aspectRatio = img.naturalWidth / img.naturalHeight
+                        if (aspectRatio > 1.5) {
+                          setModalSize('wide') // Imagen muy horizontal
+                        } else if (aspectRatio < 0.7) {
+                          setModalSize('tall') // Imagen muy vertical
+                        } else {
+                          setModalSize('default') // Aspect ratio normal
+                        }
+                      }}
+                    />
+                  )}
                   <div className="absolute top-4 right-4 flex gap-2">
                     <Button
                       size="sm"
@@ -883,7 +1215,7 @@ export default function FotosSection() {
                     <h2 className="text-2xl font-bold">{selectedPhoto.title}</h2>
                     <div className="flex items-center text-sm text-gray-500 mt-1">
                       <Calendar className="w-4 h-4 mr-1" />
-                      {formatDate(selectedPhoto.date)}
+                      {formatDate(selectedPhoto.date_taken || '')}
                     </div>
                   </div>
                   {selectedPhoto.description && (
@@ -904,11 +1236,9 @@ export default function FotosSection() {
                       </div>
                     </div>
                   )}
-                  {selectedPhoto.size && (
-                    <div className="text-sm text-gray-500">
-                      Tamaño: {formatFileSize(selectedPhoto.size)}
-                    </div>
-                  )}
+                                  <div className="text-sm text-gray-500">
+                  Tipo: {selectedPhoto.file_type === 'video' ? 'Video' : selectedPhoto.file_type === 'gif' ? 'GIF' : 'Imagen'}
+                </div>
                 </div>
               </div>
             )}

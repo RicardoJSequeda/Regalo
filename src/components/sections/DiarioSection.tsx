@@ -35,27 +35,14 @@ import {
   Zap,
   Droplets,
   Flame,
-  Lock
+  Lock,
+  Loader2
 } from 'lucide-react'
-import { useLocalStorage } from '@/hooks/useLocalStorage'
+import { getBrowserClient } from '@/lib/supabase/browser-client'
+import { uploadPublicFile } from '@/lib/supabase/storage'
+import { DiaryEntry as DiaryEntryType, DiaryEntryForm } from '@/features/diary/types'
 
-interface DiaryEntry {
-  id: string
-  title: string
-  content: string
-  date: string
-  mood: 'muy_feliz' | 'feliz' | 'tranquilo' | 'nostalgico' | 'emocionado' | 'romantico' | 'melancolico' | 'energico'
-  weather: 'soleado' | 'nublado' | 'lluvioso' | 'ventoso' | 'frio' | 'caluroso'
-  location?: string
-  author: 'yo' | 'pareja' | 'ambos'
-  isPrivate: boolean
-  isFavorite: boolean
-  tags: string[]
-  images?: string[]
-  wordCount: number
-  createdAt: string
-  updatedAt: string
-}
+// Usar el tipo de DiaryEntryType importado
 
 const moods = [
   { value: 'muy_feliz', label: 'Muy Feliz', icon: '😄', color: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
@@ -83,97 +70,101 @@ const predefinedTags = [
 ]
 
 export function DiarioSection() {
-  const { value: entries, setValue: setEntries } = useLocalStorage<DiaryEntry[]>('diaryEntries', [
-    {
-      id: '1',
-      title: 'Nuestro Primer Aniversario',
-      content: 'Hoy celebramos un año juntos y no puedo creer lo rápido que ha pasado el tiempo. Cada día a tu lado es un regalo que atesoro profundamente. Recordamos nuestro primer encuentro, esa mirada que cambió todo, y cómo desde entonces nuestras vidas se entrelazaron de la manera más hermosa. Te amo más cada día.',
-      date: '2024-01-15',
-      mood: 'muy_feliz',
-      weather: 'soleado',
-      location: 'Nuestro hogar',
-      author: 'ambos',
-      isPrivate: false,
-      isFavorite: true,
-      tags: ['Amor', 'Celebración', 'Aniversario'],
-      wordCount: 89,
-      createdAt: '2024-01-15T10:00:00Z',
-      updatedAt: '2024-01-15T10:00:00Z'
-    },
-    {
-      id: '2',
-      title: 'Reflexión sobre Nuestro Futuro',
-      content: 'Hoy me puse a pensar en todo lo que hemos construido juntos y en los sueños que compartimos. Es increíble cómo dos personas pueden tener visiones tan similares de la vida. Me emociona pensar en todo lo que nos espera: viajes, proyectos, tal vez una familia... Contigo todo es posible.',
-      date: '2024-01-10',
-      mood: 'romantico',
-      weather: 'nublado',
-      location: 'Café del centro',
-      author: 'yo',
-      isPrivate: true,
-      isFavorite: false,
-      tags: ['Reflexión', 'Futuro', 'Amor'],
-      wordCount: 67,
-      createdAt: '2024-01-10T15:30:00Z',
-      updatedAt: '2024-01-10T15:30:00Z'
-    },
-    {
-      id: '3',
-      title: 'Sorpresa Inesperada',
-      content: '¡No puedo creer lo que hiciste hoy! Llegaste a casa con flores y mi comida favorita, solo porque sabías que había tenido un día difícil. Esos pequeños gestos son los que hacen que nuestro amor sea tan especial. Gracias por ser tan atento y por recordarme siempre que no estoy sola.',
-      date: '2024-01-08',
-      mood: 'emocionado',
-      weather: 'lluvioso',
-      location: 'Nuestra casa',
-      author: 'pareja',
-      isPrivate: false,
-      isFavorite: true,
-      tags: ['Sorpresa', 'Amor', 'Casa'],
-      wordCount: 78,
-      createdAt: '2024-01-08T19:00:00Z',
-      updatedAt: '2024-01-08T19:00:00Z'
-    }
-  ])
+  const [entries, setEntries] = useState<DiaryEntryType[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
 
   const [showAddModal, setShowAddModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [selectedEntry, setSelectedEntry] = useState<DiaryEntry | null>(null)
+  const [selectedEntry, setSelectedEntry] = useState<DiaryEntryType | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedMood, setSelectedMood] = useState('Todos')
   const [selectedAuthor, setSelectedAuthor] = useState('Todos')
   const [showPrivate, setShowPrivate] = useState(true)
 
-  const [entryForm, setEntryForm] = useState({
+  const [entryForm, setEntryForm] = useState<DiaryEntryForm>({
     title: '',
     content: '',
     date: new Date().toISOString().split('T')[0],
-    mood: 'feliz' as DiaryEntry['mood'],
-    weather: 'soleado' as DiaryEntry['weather'],
+    mood: 'feliz',
+    weather: 'soleado',
     location: '',
-    author: 'yo' as DiaryEntry['author'],
+    author: 'yo',
     isPrivate: false,
-    tags: [] as string[],
-    images: [] as File[]
+    tags: [],
+    images: []
   })
+
+  // Cargar entradas desde Supabase
+  useEffect(() => {
+    const fetchEntries = async () => {
+      try {
+        setLoading(true)
+        const response = await fetch('/api/diary')
+        if (response.ok) {
+          const data = await response.json()
+          setEntries(data)
+        } else {
+          console.error('Error fetching diary entries')
+        }
+      } catch (error) {
+        console.error('Error fetching diary entries:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchEntries()
+  }, [])
+
+  // Suscripción en tiempo real
+  useEffect(() => {
+    const supabase = getBrowserClient()
+    
+    const channel = supabase
+      .channel('diary_changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'diary_entries' },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            setEntries(prev => [payload.new as DiaryEntryType, ...prev])
+          } else if (payload.eventType === 'UPDATE') {
+            setEntries(prev => prev.map(e => e.id === payload.new.id ? payload.new as DiaryEntryType : e))
+          } else if (payload.eventType === 'DELETE') {
+            setEntries(prev => prev.filter(e => e.id !== payload.old.id))
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
 
   // Estadísticas
   const stats = {
     totalEntries: entries.length,
     totalWords: entries.reduce((sum, entry) => sum + entry.wordCount, 0),
-    averageWords: Math.round(entries.reduce((sum, entry) => sum + entry.wordCount, 0) / entries.length) || 0,
+    averageWords: Math.round(entries.reduce((sum, entry) => sum + entry.wordCount, 0) / (entries.length || 1)) || 0,
     favoriteEntries: entries.filter(e => e.isFavorite).length,
     privateEntries: entries.filter(e => e.isPrivate).length,
     mostFrequentMood: getMostFrequentMood(),
-    longestEntry: entries.reduce((longest, entry) => entry.wordCount > longest.wordCount ? entry : longest, entries[0])
+    longestEntry: entries.length
+      ? entries.reduce((longest, entry) => (entry.wordCount > longest.wordCount ? entry : longest), entries[0])
+      : null
   }
 
   function getMostFrequentMood() {
+    if (entries.length === 0) return 'feliz'
     const moodCounts = entries.reduce((acc, entry) => {
       acc[entry.mood] = (acc[entry.mood] || 0) + 1
       return acc
     }, {} as Record<string, number>)
-    
-    return Object.entries(moodCounts).reduce((a, b) => moodCounts[a[0]] > moodCounts[b[0]] ? a : b)[0]
+    const moodEntries = Object.entries(moodCounts)
+    if (moodEntries.length === 0) return 'feliz'
+    return moodEntries.reduce((a, b) => (moodCounts[a[0]] > moodCounts[b[0]] ? a : b))[0]
   }
 
   // Filtrar entradas
@@ -204,7 +195,7 @@ export function DiarioSection() {
     setShowAddModal(true)
   }
 
-  const openEditModal = (entry: DiaryEntry) => {
+  const openEditModal = (entry: DiaryEntryType) => {
     setSelectedEntry(entry)
     setEntryForm({
       title: entry.title,
@@ -221,40 +212,40 @@ export function DiarioSection() {
     setShowEditModal(true)
   }
 
-  const openDeleteModal = (entry: DiaryEntry) => {
+  const openDeleteModal = (entry: DiaryEntryType) => {
     setSelectedEntry(entry)
     setShowDeleteModal(true)
   }
 
-  const handleSaveEntry = () => {
+  const handleSaveEntry = async () => {
     if (!entryForm.title || !entryForm.content) return
 
-    const wordCount = entryForm.content.split(/\s+/).filter(word => word.length > 0).length
-    const now = new Date().toISOString()
+    try {
+      setSaving(true)
+      const wordCount = entryForm.content.split(/\s+/).filter(word => word.length > 0).length
+      let imageUrls: string[] = []
 
-    let imageUrls: string[] = []
-    if (entryForm.images.length > 0) {
-      imageUrls = entryForm.images.map(img => URL.createObjectURL(img))
-    }
+      // Subir imágenes si existen
+      if (entryForm.images.length > 0) {
+        const uploadPromises = entryForm.images.map(async (image, index) => {
+          try {
+            const uploadResult = await uploadPublicFile(
+              'diary-images',
+              image,
+              `diary/${Date.now()}-${index}/`
+            )
+            return uploadResult.url
+          } catch (error) {
+            console.error('Error uploading image:', error)
+            return null
+          }
+        })
 
-    if (showEditModal && selectedEntry) {
-      // Editar entrada existente
-      setEntries(prev => prev.map(e => 
-        e.id === selectedEntry.id 
-          ? { 
-              ...e, 
-              ...entryForm, 
-              images: imageUrls.length > 0 ? imageUrls : e.images,
-              wordCount,
-              updatedAt: now
-            }
-          : e
-      ))
-      setShowEditModal(false)
-    } else {
-      // Agregar nueva entrada
-      const newEntry: DiaryEntry = {
-        id: Date.now().toString(),
+        const uploadedUrls = await Promise.all(uploadPromises)
+        imageUrls = uploadedUrls.filter(url => url !== null) as string[]
+      }
+
+      const entryData = {
         title: entryForm.title,
         content: entryForm.content,
         date: entryForm.date,
@@ -263,44 +254,98 @@ export function DiarioSection() {
         location: entryForm.location,
         author: entryForm.author,
         isPrivate: entryForm.isPrivate,
-        isFavorite: false,
         tags: entryForm.tags,
         images: imageUrls,
-        wordCount,
-        createdAt: now,
-        updatedAt: now
+        wordCount
       }
-      setEntries(prev => [newEntry, ...prev])
-      setShowAddModal(false)
-    }
 
-    // Limpiar formulario
-    setEntryForm({
-      title: '',
-      content: '',
-      date: new Date().toISOString().split('T')[0],
-      mood: 'feliz',
-      weather: 'soleado',
-      location: '',
-      author: 'yo',
-      isPrivate: false,
-      tags: [],
-      images: []
-    })
+      if (showEditModal && selectedEntry) {
+        // Editar entrada existente
+        const response = await fetch(`/api/diary/${selectedEntry.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(entryData)
+        })
+
+        if (!response.ok) {
+          console.error('Error updating diary entry')
+          return
+        }
+
+        setShowEditModal(false)
+      } else {
+        // Agregar nueva entrada
+        const response = await fetch('/api/diary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(entryData)
+        })
+
+        if (!response.ok) {
+          console.error('Error creating diary entry')
+          return
+        }
+
+        setShowAddModal(false)
+      }
+
+      // Limpiar formulario
+      setEntryForm({
+        title: '',
+        content: '',
+        date: new Date().toISOString().split('T')[0],
+        mood: 'feliz',
+        weather: 'soleado',
+        location: '',
+        author: 'yo',
+        isPrivate: false,
+        tags: [],
+        images: []
+      })
+    } catch (error) {
+      console.error('Error saving diary entry:', error)
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleDeleteEntry = () => {
-    if (selectedEntry) {
-      setEntries(prev => prev.filter(e => e.id !== selectedEntry.id))
+  const handleDeleteEntry = async () => {
+    if (!selectedEntry) return
+
+    try {
+      const response = await fetch(`/api/diary/${selectedEntry.id}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        console.error('Error deleting diary entry')
+        return
+      }
+
       setShowDeleteModal(false)
       setSelectedEntry(null)
+    } catch (error) {
+      console.error('Error deleting diary entry:', error)
     }
   }
 
-  const toggleFavorite = (entryId: string) => {
-    setEntries(prev => prev.map(e => 
-      e.id === entryId ? { ...e, isFavorite: !e.isFavorite } : e
-    ))
+  const toggleFavorite = async (entryId: string) => {
+    try {
+      const entry = entries.find(e => e.id === entryId)
+      if (!entry) return
+
+      const response = await fetch(`/api/diary/${entryId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isFavorite: !entry.isFavorite })
+      })
+
+      if (!response.ok) {
+        console.error('Error toggling favorite')
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error)
+    }
   }
 
   const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -473,8 +518,16 @@ export function DiarioSection() {
       </Card>
 
       {/* Lista de Entradas */}
-      <div className="space-y-4">
-        {filteredEntries.map((entry) => (
+      {loading ? (
+        <div className="flex justify-center items-center py-12">
+          <div className="flex items-center gap-3">
+            <Loader2 className="h-8 w-8 animate-spin text-pink-500" />
+            <span className="text-lg text-gray-600">Cargando entradas del diario...</span>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {filteredEntries.map((entry) => (
           <motion.div
             key={entry.id}
             initial={{ opacity: 0, y: 20 }}
@@ -609,8 +662,9 @@ export function DiarioSection() {
               </CardContent>
             </Card>
           </motion.div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Modal para Agregar/Editar Entrada */}
       <Dialog open={showAddModal || showEditModal} onOpenChange={() => {
@@ -660,7 +714,7 @@ export function DiarioSection() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   ¿Cómo te sientes?
                 </label>
-                <Select value={entryForm.mood} onValueChange={(value: DiaryEntry['mood']) => setEntryForm(prev => ({ ...prev, mood: value }))}>
+                <Select value={entryForm.mood} onValueChange={(value: DiaryEntryType['mood']) => setEntryForm(prev => ({ ...prev, mood: value }))}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -678,7 +732,7 @@ export function DiarioSection() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Clima
                 </label>
-                <Select value={entryForm.weather} onValueChange={(value: DiaryEntry['weather']) => setEntryForm(prev => ({ ...prev, weather: value }))}>
+                <Select value={entryForm.weather} onValueChange={(value: DiaryEntryType['weather']) => setEntryForm(prev => ({ ...prev, weather: value }))}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -727,7 +781,7 @@ export function DiarioSection() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Autor
                 </label>
-                <Select value={entryForm.author} onValueChange={(value: DiaryEntry['author']) => setEntryForm(prev => ({ ...prev, author: value }))}>
+                <Select value={entryForm.author} onValueChange={(value: DiaryEntryType['author']) => setEntryForm(prev => ({ ...prev, author: value }))}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -844,11 +898,15 @@ export function DiarioSection() {
             </Button>
             <Button
               onClick={handleSaveEntry}
-              disabled={!entryForm.title || !entryForm.content}
+              disabled={!entryForm.title || !entryForm.content || saving}
               className="bg-pink-500 hover:bg-pink-600"
             >
-              <Save className="h-4 w-4 mr-2" />
-              Guardar
+              {saving ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4 mr-2" />
+              )}
+              {saving ? 'Guardando...' : 'Guardar'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -15,6 +15,7 @@ import {
   PetReminder
 } from '@/types'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
+import { getBrowserClient } from '@/lib/supabase/browser-client'
 import { useNotifications } from '@/hooks/useNotifications'
 import { FormValidation, validators, validateForm } from '@/components/ui/form-validation'
 import { Button } from '@/components/ui/button'
@@ -976,57 +977,54 @@ const initialExpenses: PetExpense[] = [
 ]
 
 export function MascotasSection() {
-  // Hooks para persistencia y notificaciones
-  const { value: pets, setValue: setPets } = useLocalStorage<Pet[]>('pets', initialPets)
-  const { value: tasks, setValue: setTasks } = useLocalStorage<PetCareTask[]>('petTasks', initialTasks)
-  const { value: healthRecords, setValue: setHealthRecords } = useLocalStorage<PetHealthRecord[]>('petHealthRecords', initialHealthRecords)
-  const { value: photos, setValue: setPhotos } = useLocalStorage<PetPhoto[]>('petPhotos', initialPhotos)
-  const { value: inventory, setValue: setInventory } = useLocalStorage<PetInventory[]>('petInventory', initialInventory)
-  const { value: medications, setValue: setMedications } = useLocalStorage<PetMedication[]>('petMedications', initialMedications)
-  const { value: weightRecords, setValue: setWeightRecords } = useLocalStorage<PetWeightRecord[]>('petWeightRecords', initialWeightRecords)
-  const { value: behaviorRecords, setValue: setBehaviorRecords } = useLocalStorage<PetBehaviorRecord[]>('petBehaviorRecords', initialBehaviorRecords)
-  const { value: expenses, setValue: setExpenses } = useLocalStorage<PetExpense[]>('petExpenses', initialExpenses)
-  const { value: reminders, setValue: setReminders } = useLocalStorage<PetReminder[]>('petReminders', [])
+  // Estado local ahora vacío; se cargará desde Supabase
+  const [pets, setPets] = useState<Pet[]>([])
+  const [tasks, setTasks] = useState<PetCareTask[]>([])
+  const [healthRecords, setHealthRecords] = useState<PetHealthRecord[]>([])
+  const [photos, setPhotos] = useState<PetPhoto[]>([])
+  const [inventory, setInventory] = useState<PetInventory[]>([])
+  const [medications, setMedications] = useState<PetMedication[]>([])
+  const [weightRecords, setWeightRecords] = useState<PetWeightRecord[]>([])
+  const [behaviorRecords, setBehaviorRecords] = useState<PetBehaviorRecord[]>([])
+  const [expenses, setExpenses] = useState<PetExpense[]>([])
+  const [reminders, setReminders] = useState<PetReminder[]>([])
+  const [loading, setLoading] = useState(true)
+  const supabase = getBrowserClient()
 
-  // Asegurar que los datos se carguen correctamente
+  // Cargar desde Supabase (lectura inicial)
   useEffect(() => {
-    // Forzar la carga de los nuevos datos de Don Estrella
-    console.log('Cargando datos de Don Estrella...')
-    
-    // Limpiar localStorage y cargar nuevos datos
-    localStorage.removeItem('pets')
-    localStorage.removeItem('petTasks')
-    localStorage.removeItem('petHealthRecords')
-    localStorage.removeItem('petPhotos')
-    localStorage.removeItem('petInventory')
-    localStorage.removeItem('petMedications')
-    localStorage.removeItem('petWeightRecords')
-    localStorage.removeItem('petBehaviorRecords')
-    localStorage.removeItem('petExpenses')
-    
-    // Cargar los nuevos datos
-    setPets(initialPets)
-    setTasks(initialTasks)
-    setHealthRecords(initialHealthRecords)
-    setPhotos(initialPhotos)
-    setInventory(initialInventory)
-    setMedications(initialMedications)
-    setWeightRecords(initialWeightRecords)
-    setBehaviorRecords(initialBehaviorRecords)
-    setExpenses(initialExpenses)
-    
-    console.log('Datos de Don Estrella cargados:', {
-      pets: initialPets.length,
-      tasks: initialTasks.length,
-      healthRecords: initialHealthRecords.length,
-      photos: initialPhotos.length,
-      inventory: initialInventory.length,
-      medications: initialMedications.length,
-      weightRecords: initialWeightRecords.length,
-      behaviorRecords: initialBehaviorRecords.length,
-      expenses: initialExpenses.length
-    })
-  }, [setPets, setTasks, setHealthRecords, setPhotos, setInventory, setMedications, setWeightRecords, setBehaviorRecords, setExpenses])
+    const loadAll = async () => {
+      try {
+        setLoading(true)
+        const [petsRes, tasksRes, healthRes, photosRes, invRes, medsRes, weightRes, behRes, expRes] = await Promise.all([
+          supabase.from('pets').select('*').order('created_at', { ascending: true }),
+          supabase.from('pet_tasks').select('*').order('created_at', { ascending: true }),
+          supabase.from('pet_health_records').select('*').order('date', { ascending: false }),
+          supabase.from('pet_photos').select('*').order('date', { ascending: false }),
+          supabase.from('pet_inventory').select('*').order('created_at', { ascending: false }),
+          supabase.from('pet_medications').select('*').order('created_at', { ascending: false }),
+          supabase.from('pet_weight_records').select('*').order('date', { ascending: false }),
+          supabase.from('pet_behavior_records').select('*').order('date', { ascending: false }),
+          supabase.from('pet_expenses').select('*').order('date', { ascending: false })
+        ])
+
+        if (!petsRes.error) setPets(petsRes.data as any)
+        if (!tasksRes.error) setTasks(tasksRes.data as any)
+        if (!healthRes.error) setHealthRecords(healthRes.data as any)
+        if (!photosRes.error) setPhotos(photosRes.data as any)
+        if (!invRes.error) setInventory(invRes.data as any)
+        if (!medsRes.error) setMedications(medsRes.data as any)
+        if (!weightRes.error) setWeightRecords(weightRes.data as any)
+        if (!behRes.error) setBehaviorRecords(behRes.data as any)
+        if (!expRes.error) setExpenses(expRes.data as any)
+      } catch (e) {
+        console.error('Error cargando datos de mascotas:', e)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadAll()
+  }, [supabase])
 
   // Hook de notificaciones
   const { requestPermission, sendNotification } = useNotifications()
@@ -1134,103 +1132,96 @@ export function MascotasSection() {
       return
     }
 
-    if (newPet.name && newPet.type) {
+    if (!newPet.name || !newPet.type) return
+
+    const upsert = async () => {
       if (selectedPet) {
-        // Editar mascota existente
-        const updatedPet: Pet = {
-          ...selectedPet,
-          name: newPet.name,
-          type: newPet.type as 'perro' | 'gato' | 'pajaro' | 'pez' | 'hamster' | 'conejo' | 'otro',
-          breed: newPet.breed,
-          birthDate: newPet.birthDate,
-          weight: newPet.weight,
-          color: newPet.color,
-          image: newPet.image,
-          notes: newPet.notes,
-          updatedAt: new Date().toISOString()
-        }
-        setPets(pets.map(p => p.id === selectedPet.id ? updatedPet : p))
-        
-        // Enviar notificación
-        sendNotification({
-          title: 'Mascota actualizada',
-          body: `Se ha actualizado la información de ${updatedPet.name}`
-        })
+        const { data, error } = await supabase
+          .from('pets')
+          .update({
+            name: newPet.name,
+            type: newPet.type,
+            breed: newPet.breed || null,
+            birthDate: newPet.birthDate || null,
+            weight: newPet.weight || null,
+            color: newPet.color || null,
+            image: newPet.image || null,
+            notes: newPet.notes || null,
+            updatedAt: new Date().toISOString()
+          })
+          .eq('id', selectedPet.id)
+          .select()
+        if (!error && data) setPets(prev => prev.map(p => p.id === selectedPet.id ? (data[0] as any) : p))
+        sendNotification({ title: 'Mascota actualizada', body: `Se ha actualizado la información de ${newPet.name}` })
       } else {
-        // Agregar nueva mascota
-      const pet: Pet = {
-        id: Date.now(),
-        name: newPet.name,
-        type: newPet.type as 'perro' | 'gato' | 'pajaro' | 'pez' | 'hamster' | 'conejo' | 'otro',
-        breed: newPet.breed,
-        birthDate: newPet.birthDate,
-        weight: newPet.weight,
-        color: newPet.color,
-        image: newPet.image,
-        notes: newPet.notes,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        const { data, error } = await supabase
+          .from('pets')
+          .insert([{
+            name: newPet.name,
+            type: newPet.type,
+            breed: newPet.breed || null,
+            birthDate: newPet.birthDate || null,
+            weight: newPet.weight || null,
+            color: newPet.color || null,
+            image: newPet.image || null,
+            notes: newPet.notes || null
+          }])
+          .select()
+        if (!error && data) setPets(prev => [...prev, data[0] as any])
+        sendNotification({ title: 'Nueva mascota agregada', body: `Se ha agregado ${newPet.name} a tu familia de mascotas` })
       }
-      setPets([...pets, pet])
-        
-        // Enviar notificación
-        sendNotification({
-          title: 'Nueva mascota agregada',
-          body: `Se ha agregado ${pet.name} a tu familia de mascotas`
-        })
-      }
-      
+    }
+
+    upsert().finally(() => {
       setNewPet({})
       setSelectedPet(null)
       setShowAddPetDialog(false)
       setValidationErrors([])
-    }
+    })
   }
 
-  const addTask = () => {
-    if (newTask.title && newTask.petId && newTask.type) {
-      if (isEditingTask && newTask.id) {
-        // Editar tarea existente
-        setTasks(tasks.map(task => 
-          task.id === newTask.id 
-            ? {
-                ...task,
-                petId: newTask.petId as number,
-                title: newTask.title || '',
-                description: newTask.description || '',
-                type: newTask.type as 'alimentacion' | 'ejercicio' | 'limpieza' | 'veterinario' | 'medicina' | 'otro',
-                frequency: (newTask.frequency as 'diario' | 'semanal' | 'mensual' | 'personalizado') || 'diario',
-                nextDue: newTask.nextDue || new Date().toISOString(),
-                priority: (newTask.priority as 'Alta' | 'Media' | 'Baja') || 'Media',
-                reminder: newTask.reminder,
-                notes: newTask.notes,
-                updatedAt: new Date().toISOString()
-              }
-            : task
-        ))
-      } else {
-        // Agregar nueva tarea
-        const task: PetCareTask = {
-          id: Date.now(),
+  const addTask = async () => {
+    if (!(newTask.title && newTask.petId && newTask.type)) return
+
+    if (isEditingTask && newTask.id) {
+      const { data, error } = await supabase
+        .from('pet_tasks')
+        .update({
+          petId: newTask.petId as number,
+          title: newTask.title || '',
+          description: newTask.description || '',
+          type: newTask.type as any,
+          frequency: (newTask.frequency as any) || 'diario',
+          nextDue: newTask.nextDue || new Date().toISOString(),
+          priority: (newTask.priority as any) || 'Media',
+          reminder: newTask.reminder || null,
+          notes: newTask.notes || null,
+          updatedAt: new Date().toISOString()
+        })
+        .eq('id', newTask.id)
+        .select()
+      if (!error && data) setTasks(prev => prev.map(t => t.id === newTask.id ? (data[0] as any) : t))
+    } else {
+      const { data, error } = await supabase
+        .from('pet_tasks')
+        .insert([{ 
           petId: newTask.petId as number,
           title: newTask.title,
           description: newTask.description || '',
-          type: newTask.type as 'alimentacion' | 'ejercicio' | 'limpieza' | 'veterinario' | 'medicina' | 'otro',
-          frequency: (newTask.frequency as 'diario' | 'semanal' | 'mensual' | 'personalizado') || 'diario',
+          type: newTask.type as any,
+          frequency: (newTask.frequency as any) || 'diario',
           nextDue: newTask.nextDue || new Date().toISOString(),
-          priority: (newTask.priority as 'Alta' | 'Media' | 'Baja') || 'Media',
+          priority: (newTask.priority as any) || 'Media',
           status: 'pendiente',
-          reminder: newTask.reminder,
-          notes: newTask.notes,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        }
-        setTasks([...tasks, task])
-      }
-      setNewTask({})
-      setShowAddTaskDialog(false)
-      setIsEditingTask(false)
+          reminder: newTask.reminder || null,
+          notes: newTask.notes || null
+        }])
+        .select()
+      if (!error && data) setTasks(prev => [...prev, data[0] as any])
     }
+    setNewTask({})
+    setShowAddTaskDialog(false)
+    setIsEditingTask(false)
   }
 
   const addHealthRecord = () => {

@@ -1,52 +1,50 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
-import { FreeMap } from '@/components/ui/free-map'
-import { Heart, Calendar, MapPin, Image, Clock, Star, Map, Camera, Plane, Search, Edit, Trash2, ChevronRight, AlertCircle, X, Save, Plus } from 'lucide-react'
-import { MapPlace } from '@/types'
-import { useLocalStorage } from '@/hooks/useLocalStorage'
-
-interface Milestone {
-  id: number
-  title: string
-  date: string
-  description: string
-  image: string
-  type: string
-}
+import { LeafletMap } from '@/components/ui/leaflet-map'
+import { Heart, Calendar, MapPin, Image, Clock, Star, Map, Camera, Plane, Search, Edit, Trash2, ChevronRight, AlertCircle, X, Save, Plus, Upload } from 'lucide-react'
+import { Milestone, MemoryPlace, Curiosity } from '@/types'
+import { getBrowserClient } from '@/lib/supabase/browser-client'
 
 export function RecuerdosSection() {
+  const supabase = getBrowserClient()
+  
+  // Estados para datos de Supabase
+  const [milestones, setMilestones] = useState<Milestone[]>([])
+  const [places, setPlaces] = useState<MemoryPlace[]>([])
+  const [curiosities, setCuriosities] = useState<Curiosity[]>([])
+  const [loading, setLoading] = useState(true)
+  
+  // Estados para UI
   const [currentCuriosityIndex, setCurrentCuriosityIndex] = useState(0)
   const [selectedFilter, setSelectedFilter] = useState('Todos')
   const [selectedPlaceFilter, setSelectedPlaceFilter] = useState('Todos')
   const [searchTerm, setSearchTerm] = useState('')
+  const [searchResults, setSearchResults] = useState<MemoryPlace[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+  const [showMapResults, setShowMapResults] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [deletingMilestone, setDeletingMilestone] = useState<Milestone | null>(null)
   const [isEditPlaceModalOpen, setIsEditPlaceModalOpen] = useState(false)
-  const [editingPlace, setEditingPlace] = useState<{
-    id: number
-    name: string
-    date: string
-    address: string
-    status: string
-  } | null>(null)
+  const [editingPlace, setEditingPlace] = useState<MemoryPlace | null>(null)
   const [isDeletePlaceModalOpen, setIsDeletePlaceModalOpen] = useState(false)
-  const [deletingPlace, setDeletingPlace] = useState<{
-    id: number
-    name: string
-    date: string
-    address: string
-    status: string
-  } | null>(null)
-  const { value: mapPlaces, setValue: setMapPlaces } = useLocalStorage<MapPlace[]>('mapPlaces', [
+  const [deletingPlace, setDeletingPlace] = useState<MemoryPlace | null>(null)
+  
+  // Estados para upload de imágenes
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  
+  // Estados para mapPlaces (mantener compatibilidad con FreeMap)
+  const [mapPlaces, setMapPlaces] = useState([
     {
       id: 1,
       name: "Parque Central",
@@ -91,174 +89,291 @@ export function RecuerdosSection() {
       lng: 12.3155,
       type: "Ciudad",
       visited: false
-    }
-  ])
-
-  // Datos de curiosidades
-  const curiosities = [
-    "Nuestra canción especial es la que sonaba en la radio la primera vez que nos dijimos 'Te amo!'",
-    "El primer regalo que te di fue un libro que hablaba sobre el amor eterno",
-    "Nuestro color favorito juntos es el rosa porque representa nuestro amor dulce",
-    "La primera vez que cocinamos juntos fue un desastre pero nos reímos mucho"
-  ]
-
-  // Datos de hitos por defecto
-  const defaultMilestones: Milestone[] = [
-    {
-      id: 1,
-      title: "Nuestra Primera Cita",
-      date: "2023-02-14",
-      description: "Una cena romántica que marcó el comienzo",
-      image: "https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=300&h=533&fit=crop&crop=center",
-      type: "aniversario"
-    },
-    {
-      id: 2,
-      title: "Viaje a la Playa",
-      date: "2023-06-15",
-      description: "Nuestro primer viaje juntos",
-      image: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=300&h=533&fit=crop&crop=center",
-      type: "viajes"
-    },
-    {
-      id: 3,
-      title: "Celebración de Cumpleaños",
-      date: "2023-08-20",
-      description: "Una sorpresa especial para tu cumpleaños",
-      image: "https://images.unsplash.com/photo-1464349153735-7db50ed83c84?w=300&h=533&fit=crop&crop=center",
-      type: "eventos"
-    },
-    {
-      id: 4,
-      title: "Noche de Estrellas",
-      date: "2023-09-15",
-      description: "Contemplamos las estrellas juntos, un momento mágico",
-      image: "https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=300&h=533&fit=crop&crop=center",
-      type: "eventos"
-    },
-    {
-      id: 5,
-      title: "Concierto Romántico",
-      date: "2023-10-10",
-      description: "Nuestro primer concierto juntos, fue inolvidable",
-      image: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=533&fit=crop&crop=center",
-      type: "eventos"
     },
     {
       id: 6,
-      title: "Picnic en el Parque",
-      date: "2023-11-05",
-      description: "Un día perfecto con comida casera y mucha risa",
-      image: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=300&h=533&fit=crop&crop=center",
-      type: "eventos"
+      name: "Casa de Montería",
+      address: "Tv. 3 #21-7, Montería, Córdoba",
+      lat: 8.7505,
+      lng: -75.8786,
+      type: "Casa",
+      visited: true
     },
     {
       id: 7,
-      title: "Aniversario de 6 Meses",
-      date: "2023-12-14",
-      description: "Celebramos medio año juntos con una cena especial",
-      image: "https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=300&h=533&fit=crop&crop=center",
-      type: "aniversario"
+      name: "Centro Comercial Montería",
+      address: "Calle 30 #15-45, Montería, Córdoba",
+      lat: 8.7512,
+      lng: -75.8791,
+      type: "Centro Comercial",
+      visited: false
     },
     {
       id: 8,
-      title: "Viaje a la Montaña",
-      date: "2024-01-20",
-      description: "Nuestra primera aventura en la montaña, vistas increíbles",
-      image: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=300&h=533&fit=crop&crop=center",
-      type: "viajes"
-    },
-    {
-      id: 9,
-      title: "Cena de San Valentín",
-      date: "2024-02-14",
-      description: "Una velada romántica en nuestro restaurante favorito",
-      image: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=300&h=533&fit=crop&crop=center",
-      type: "aniversario"
-    },
-    {
-      id: 10,
-      title: "Paseo por la Ciudad",
-      date: "2024-03-10",
-      description: "Exploramos juntos los rincones más bonitos de la ciudad",
-      image: "https://images.unsplash.com/photo-1529333166437-7750a6dd5a70?w=300&h=533&fit=crop&crop=center",
-      type: "viajes"
-    }
-  ];
-
-  // Datos de hitos (10 en total) - usando useState para asegurar que se muestren
-  const [milestones, setMilestones] = useState<Milestone[]>(defaultMilestones);
-
-  // Datos de lugares para la lista - ahora con estado
-  const [places, setPlaces] = useState([
-    {
-      id: 1,
-      name: "Parque Central",
-      date: "15 de marzo de 2020",
-      address: "Calle Principal 123, Ciudad",
-      status: "visitado"
-    },
-    {
-      id: 2,
-      name: "Restaurante El Amor",
-      date: "14 de febrero de 2020",
-      address: "Av. Romántica 456, Ciudad",
-      status: "visitado"
-    },
-    {
-      id: 3,
-      name: "Playa del Amor",
-      date: "15 de marzo de 2020",
-      address: "Costa del Pacífico, México",
-      status: "visitado"
-    },
-    {
-      id: 4,
-      name: "París",
-      date: "Próximamente",
-      address: "Francia",
-      status: "pendiente"
+      name: "Universidad de Córdoba",
+      address: "Carrera 6 #76-103, Montería, Córdoba",
+      lat: 8.7520,
+      lng: -75.8800,
+      type: "Universidad",
+      visited: true
     }
   ])
+
+  // Cargar datos desde Supabase
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  // Suscripción en tiempo real
+  useEffect(() => {
+    const channel = supabase
+      .channel('memories_changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'milestones' }, 
+        () => {
+          loadMilestones()
+        }
+      )
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'places' }, 
+        () => {
+          loadPlaces()
+        }
+      )
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'curiosities' }, 
+        () => {
+          loadCuriosities()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [supabase])
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      await Promise.all([
+        loadMilestones(),
+        loadPlaces(),
+        loadCuriosities()
+      ])
+    } catch (error) {
+      console.error('Error loading data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadMilestones = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('milestones')
+        .select('*')
+        .order('date_taken', { ascending: false })
+
+      if (error) {
+        console.error('Error loading milestones:', error)
+        return
+      }
+
+      setMilestones(data || [])
+    } catch (error) {
+      console.error('Error in loadMilestones:', error)
+    }
+  }
+
+  const loadPlaces = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('places')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('Error loading places:', error)
+        return
+      }
+
+      setPlaces(data || [])
+    } catch (error) {
+      console.error('Error in loadPlaces:', error)
+    }
+  }
+
+  const loadCuriosities = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('curiosities')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('Error loading curiosities:', error)
+        return
+      }
+
+      setCuriosities(data || [])
+    } catch (error) {
+      console.error('Error in loadCuriosities:', error)
+    }
+  }
 
   // Filtrar hitos según el filtro seleccionado
   const filteredMilestones = selectedFilter === 'Todos' 
     ? milestones 
     : milestones.filter(milestone => milestone.type === selectedFilter.toLowerCase())
 
-  // Filtrar lugares según el filtro seleccionado
+  // Función de búsqueda avanzada
+  const performSearch = (query: string) => {
+    if (!query.trim()) {
+      setSearchResults([])
+      setShowMapResults(false)
+      return
+    }
+
+    setIsSearching(true)
+    
+    // Búsqueda local avanzada en lugares existentes
+    const results = places.filter(place => {
+      const searchLower = query.toLowerCase()
+      const searchTerms = searchLower.split(' ').filter(term => term.length > 0)
+      
+      // Búsqueda por términos múltiples
+      return searchTerms.every(term => {
+        return (
+          place.name.toLowerCase().includes(term) ||
+          (place.address && place.address.toLowerCase().includes(term)) ||
+          (place.description && place.description.toLowerCase().includes(term)) ||
+          (place.tags && place.tags.some(tag => tag.toLowerCase().includes(term))) ||
+          (place.type && place.type.toLowerCase().includes(term))
+        )
+      })
+    })
+
+    // Ordenar resultados por relevancia
+    const sortedResults = results.sort((a, b) => {
+      const aScore = getRelevanceScore(a, query)
+      const bScore = getRelevanceScore(b, query)
+      return bScore - aScore
+    })
+
+    setSearchResults(sortedResults)
+    setShowMapResults(sortedResults.length > 0)
+    setIsSearching(false)
+  }
+
+  // Función para calcular relevancia de búsqueda
+  const getRelevanceScore = (place: MemoryPlace, query: string): number => {
+    const queryLower = query.toLowerCase()
+    let score = 0
+    
+    // Puntuación por coincidencia exacta en nombre
+    if (place.name.toLowerCase().includes(queryLower)) {
+      score += 10
+    }
+    
+    // Puntuación por coincidencia en dirección
+    if (place.address && place.address.toLowerCase().includes(queryLower)) {
+      score += 8
+    }
+    
+    // Puntuación por coincidencia en descripción
+    if (place.description && place.description.toLowerCase().includes(queryLower)) {
+      score += 5
+    }
+    
+    // Puntuación por coincidencia en tags
+    if (place.tags && place.tags.some(tag => tag.toLowerCase().includes(queryLower))) {
+      score += 3
+    }
+    
+    // Puntuación por tipo
+    if (place.type && place.type.toLowerCase().includes(queryLower)) {
+      score += 2
+    }
+    
+    return score
+  }
+
+  // Búsqueda con debounce
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchTerm.trim()) {
+        performSearch(searchTerm)
+      } else {
+        setSearchResults([])
+        setShowMapResults(false)
+      }
+    }, 300)
+
+    return () => clearTimeout(timeoutId)
+  }, [searchTerm])
+
+  // Filtrar lugares según el filtro seleccionado (sin búsqueda)
   const filteredPlaces = places.filter(place => {
-    const matchesSearch = place.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         place.address.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesFilter = selectedPlaceFilter === 'Todos' ||
                          (selectedPlaceFilter === 'Visitados' && place.status === 'visitado') ||
                          (selectedPlaceFilter === 'Pendientes' && place.status === 'pendiente')
-    return matchesSearch && matchesFilter
+    return matchesFilter
   })
 
   const showNextCuriosity = () => {
+    if (curiosities.length > 0) {
     setCurrentCuriosityIndex((prev) => (prev + 1) % curiosities.length)
+    }
   }
 
   // Función para agregar lugar desde el mapa
-  const handleAddPlaceFromMap = (newPlace: Omit<MapPlace, 'id'>) => {
-    const newId = Math.max(...mapPlaces.map(p => p.id)) + 1
-    setMapPlaces(prev => [...prev, { ...newPlace, id: newId }])
-    
-    // También agregar a la lista de lugares guardados
-    const newPlaceId = Math.max(...places.map(p => p.id)) + 1
-    const newPlaceForList = {
-      id: newPlaceId,
+  const handleAddPlaceFromMap = async (newPlace: any) => {
+    try {
+      const placeData = {
+        name: newPlace.name,
+        address: newPlace.address,
+        lat: newPlace.lat,
+        lng: newPlace.lng,
+        type: newPlace.type.toLowerCase(),
+        status: 'pendiente',
+        tags: [newPlace.type.toLowerCase()]
+      }
+
+      const { data, error } = await supabase
+        .from('places')
+        .insert([placeData])
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error adding place:', error)
+        return
+      }
+
+      // Actualizar mapPlaces para compatibilidad
+      const newMapPlace = {
+        id: mapPlaces.length + 1,
       name: newPlace.name,
-      date: new Date().toLocaleDateString('es-ES', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      }),
       address: newPlace.address,
-      status: "pendiente"
+        lat: newPlace.lat,
+        lng: newPlace.lng,
+        type: newPlace.type,
+        visited: false
+      }
+      setMapPlaces(prev => [...prev, newMapPlace])
+      
+      // Recargar lugares y limpiar búsqueda si está activa
+      await loadPlaces()
+      if (showMapResults) {
+        setShowMapResults(false)
+        setSearchResults([])
+        setSearchTerm('')
+      }
+    } catch (error) {
+      console.error('Error in handleAddPlaceFromMap:', error)
     }
-    setPlaces(prev => [...prev, newPlaceForList])
   }
 
   // Funciones para editar hitos
@@ -267,19 +382,58 @@ export function RecuerdosSection() {
     setIsEditModalOpen(true)
   }
 
-  const handleSaveMilestone = () => {
-    if (editingMilestone) {
-      setMilestones(prev => 
-        prev.map(m => m.id === editingMilestone.id ? editingMilestone : m)
-      )
+  const handleSaveMilestone = async () => {
+    if (!editingMilestone) return
+
+    try {
+      let imageUrl = editingMilestone.image_url
+
+      // Si hay una nueva imagen seleccionada, subirla
+      if (selectedImageFile) {
+        try {
+          imageUrl = await uploadImageToSupabase(selectedImageFile)
+          if (!imageUrl) {
+            alert('Error al subir la imagen')
+            return
+          }
+        } catch (error) {
+          alert('Error al subir la imagen: ' + (error as Error).message)
+          return
+        }
+      }
+
+      const { error } = await supabase
+        .from('milestones')
+        .update({
+          title: editingMilestone.title,
+          description: editingMilestone.description,
+          image_url: imageUrl,
+          date_taken: editingMilestone.date_taken,
+          type: editingMilestone.type,
+          location: editingMilestone.location,
+          tags: editingMilestone.tags,
+          is_favorite: editingMilestone.is_favorite
+        })
+        .eq('id', editingMilestone.id)
+
+      if (error) {
+        console.error('Error updating milestone:', error)
+        return
+      }
+
       setIsEditModalOpen(false)
       setEditingMilestone(null)
+      clearImageSelection()
+      await loadMilestones()
+    } catch (error) {
+      console.error('Error in handleSaveMilestone:', error)
     }
   }
 
   const handleCancelEdit = () => {
     setIsEditModalOpen(false)
     setEditingMilestone(null)
+    clearImageSelection()
   }
 
   // Funciones para eliminar hitos
@@ -288,11 +442,25 @@ export function RecuerdosSection() {
     setIsDeleteModalOpen(true)
   }
 
-  const handleConfirmDelete = () => {
-    if (deletingMilestone) {
-      setMilestones(prev => prev.filter(m => m.id !== deletingMilestone.id))
+  const handleConfirmDelete = async () => {
+    if (!deletingMilestone) return
+
+    try {
+      const { error } = await supabase
+        .from('milestones')
+        .delete()
+        .eq('id', deletingMilestone.id)
+
+      if (error) {
+        console.error('Error deleting milestone:', error)
+        return
+      }
+
       setIsDeleteModalOpen(false)
       setDeletingMilestone(null)
+      await loadMilestones()
+    } catch (error) {
+      console.error('Error in handleConfirmDelete:', error)
     }
   }
 
@@ -302,55 +470,170 @@ export function RecuerdosSection() {
   }
 
   // Funciones para editar lugares
-  const handleEditPlace = (place: {
-    id: number
-    name: string
-    date: string
-    address: string
-    status: string
-  }) => {
+  const handleEditPlace = (place: MemoryPlace) => {
     setEditingPlace(place)
     setIsEditPlaceModalOpen(true)
   }
 
-  const handleSavePlace = () => {
-    if (editingPlace) {
-      setPlaces((prev: any) => 
-        prev.map((p: any) => p.id === editingPlace.id ? editingPlace : p)
-      )
+  const handleSavePlace = async () => {
+    if (!editingPlace) return
+
+    try {
+      let imageUrl = editingPlace.image_url
+
+      // Si hay una nueva imagen seleccionada, subirla
+      if (selectedImageFile) {
+        try {
+          imageUrl = await uploadImageToSupabase(selectedImageFile)
+          if (!imageUrl) {
+            alert('Error al subir la imagen')
+            return
+          }
+        } catch (error) {
+          alert('Error al subir la imagen: ' + (error as Error).message)
+          return
+        }
+      }
+
+      const { error } = await supabase
+        .from('places')
+        .update({
+          name: editingPlace.name,
+          address: editingPlace.address,
+          lat: editingPlace.lat,
+          lng: editingPlace.lng,
+          type: editingPlace.type,
+          status: editingPlace.status,
+          visit_date: editingPlace.visit_date,
+          description: editingPlace.description,
+          image_url: imageUrl,
+          tags: editingPlace.tags,
+          is_favorite: editingPlace.is_favorite
+        })
+        .eq('id', editingPlace.id)
+
+      if (error) {
+        console.error('Error updating place:', error)
+        return
+      }
+
       setIsEditPlaceModalOpen(false)
       setEditingPlace(null)
+      clearImageSelection()
+      await loadPlaces()
+    } catch (error) {
+      console.error('Error in handleSavePlace:', error)
     }
   }
 
   const handleCancelEditPlace = () => {
     setIsEditPlaceModalOpen(false)
     setEditingPlace(null)
+    clearImageSelection()
   }
 
   // Funciones para eliminar lugares
-  const handleDeletePlace = (place: {
-    id: number
-    name: string
-    date: string
-    address: string
-    status: string
-  }) => {
+  const handleDeletePlace = (place: MemoryPlace) => {
     setDeletingPlace(place)
     setIsDeletePlaceModalOpen(true)
   }
 
-  const handleConfirmDeletePlace = () => {
-    if (deletingPlace) {
-      setPlaces((prev: any) => prev.filter((p: any) => p.id !== deletingPlace.id))
+  const handleConfirmDeletePlace = async () => {
+    if (!deletingPlace) return
+
+    try {
+      const { error } = await supabase
+        .from('places')
+        .delete()
+        .eq('id', deletingPlace.id)
+
+      if (error) {
+        console.error('Error deleting place:', error)
+        return
+      }
+
       setIsDeletePlaceModalOpen(false)
       setDeletingPlace(null)
+      await loadPlaces()
+    } catch (error) {
+      console.error('Error in handleConfirmDeletePlace:', error)
     }
   }
 
   const handleCancelDeletePlace = () => {
     setIsDeletePlaceModalOpen(false)
     setDeletingPlace(null)
+  }
+
+  // Funciones para upload de imágenes
+  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      // Validar tipo de archivo
+      if (!file.type.startsWith('image/')) {
+        alert('Por favor selecciona un archivo de imagen válido')
+        return
+      }
+      
+      // Validar tamaño (máximo 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        alert('La imagen debe ser menor a 10MB')
+        return
+      }
+      
+      setSelectedImageFile(file)
+      
+      // Crear preview
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        setImagePreview(e.target?.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const uploadImageToSupabase = async (file: File): Promise<string | null> => {
+    try {
+      setUploadingImage(true)
+      
+      // Generar nombre único para el archivo
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${fileExt}`
+      const filePath = `memories/${fileName}`
+      
+      // Subir archivo a Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('photos')
+        .upload(filePath, file)
+      
+      if (uploadError) {
+        console.error('Error uploading image:', uploadError)
+        throw new Error('Error al subir la imagen')
+      }
+      
+      // Obtener URL pública
+      const { data: urlData } = supabase.storage
+        .from('photos')
+        .getPublicUrl(filePath)
+      
+      return urlData.publicUrl
+    } catch (error) {
+      console.error('Error in uploadImageToSupabase:', error)
+      throw error
+    } finally {
+      setUploadingImage(false)
+    }
+  }
+
+  const clearImageSelection = () => {
+    setSelectedImageFile(null)
+    setImagePreview(null)
+    // Limpiar ambos inputs de imagen
+    const imageUpload = document.getElementById('image-upload') as HTMLInputElement
+    const placeImageUpload = document.getElementById('place-image-upload') as HTMLInputElement
+    
+    if (imageUpload) imageUpload.value = ''
+    if (placeImageUpload) placeImageUpload.value = ''
   }
 
   // Animaciones
@@ -388,6 +671,20 @@ export function RecuerdosSection() {
     }
   }
 
+  if (loading) {
+    return (
+      <div className="space-y-8">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold tracking-tight">Recuerdos</h1>
+        </div>
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 mx-auto"></div>
+          <p className="text-gray-600 mt-4">Cargando recuerdos...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <>
       <motion.div 
@@ -410,11 +707,12 @@ export function RecuerdosSection() {
                 <div className="flex-1 space-y-3">
                   <h3 className="text-xl font-bold text-pink-700">¿Sabías que...?</h3>
                   <p className="text-gray-700 leading-relaxed">
-                    {curiosities[currentCuriosityIndex]}
+                    {curiosities.length > 0 ? curiosities[currentCuriosityIndex]?.text : 'No hay curiosidades disponibles'}
                   </p>
                   <Button 
                     onClick={showNextCuriosity}
                     className="bg-pink-500 hover:bg-pink-600 text-white"
+                    disabled={curiosities.length === 0}
                   >
                     Mostrar siguiente curiosidad
                   </Button>
@@ -488,7 +786,7 @@ export function RecuerdosSection() {
                       <div className="relative">
                         <div className="w-full h-80 overflow-hidden rounded-t-lg">
                           <img
-                            src={milestone.image}
+                            src={milestone.image_url || 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=300&h=533&fit=crop&crop=center'}
                             alt={milestone.title}
                             className="w-full h-full object-cover"
                             style={{ aspectRatio: '9/16' }}
@@ -515,7 +813,7 @@ export function RecuerdosSection() {
                       </div>
                       <CardContent className="p-4">
                         <h3 className="font-bold text-lg mb-2">{milestone.title}</h3>
-                        <p className="text-sm text-gray-600 mb-2">{milestone.date}</p>
+                        <p className="text-sm text-gray-600 mb-2">{milestone.date_taken}</p>
                         <p className="text-gray-700 mb-3">{milestone.description}</p>
                         <Button variant="link" className="p-0 h-auto text-pink-600 hover:text-pink-700">
                           Ver más
@@ -532,28 +830,63 @@ export function RecuerdosSection() {
 
         {/* Sección "Mapa de Lugares Especiales" */}
         <motion.div className="space-y-4" variants={itemVariants}>
-          <h2 className="text-2xl font-bold text-pink-700">Mapa de Lugares Especiales</h2>
-          <FreeMap 
-            places={mapPlaces} 
-            className="h-96 w-full" 
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-pink-700">
+              {showMapResults ? 'Resultados de Búsqueda en el Mapa' : 'Mapa de Lugares Especiales'}
+            </h2>
+            {showMapResults && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowMapResults(false)
+                  setSearchResults([])
+                }}
+                className="text-pink-600 border-pink-300 hover:bg-pink-50"
+              >
+                <X className="h-4 w-4 mr-1" />
+                Limpiar búsqueda
+              </Button>
+            )}
+          </div>
+          
+          {/* Información de resultados */}
+          {showMapResults && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <div className="flex items-center gap-2 text-blue-800">
+                <Search className="h-4 w-4" />
+                <span className="font-medium">
+                  {searchResults.length} resultado{searchResults.length !== 1 ? 's' : ''} encontrado{searchResults.length !== 1 ? 's' : ''} para "{searchTerm}"
+                </span>
+              </div>
+              <p className="text-blue-600 text-sm mt-1">
+                Los resultados se muestran en el mapa. Haz clic en los marcadores para ver detalles.
+              </p>
+            </div>
+          )}
+          
+          {/* Mapa con altura mejorada */}
+          <div className="relative">
+            <LeafletMap 
+              places={showMapResults ? searchResults.map(place => ({
+                id: parseInt(place.id.replace(/\D/g, '') || '0'),
+                name: place.name,
+                address: place.address || '',
+                lat: place.lat || 0,
+                lng: place.lng || 0,
+                type: place.type,
+                visited: place.status === 'visitado'
+              })) : mapPlaces} 
+              className="h-[500px] w-full" 
             onAddPlace={handleAddPlaceFromMap}
           />
+          </div>
         </motion.div>
 
         {/* Sección "Lista de Lugares Guardados" */}
         <motion.div className="space-y-4" variants={itemVariants}>
+          <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold text-pink-700">Lista de Lugares Guardados</h2>
-          
-          <div className="flex items-center gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Buscar lugar..."
-                className="pl-10"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
             <div className="flex gap-2">
               {["Todos", "Visitados", "Pendientes", "Eventos"].map((filter) => (
                 <Button
@@ -568,12 +901,63 @@ export function RecuerdosSection() {
               ))}
             </div>
           </div>
+          
+          {/* Buscador mejorado */}
+          <div className="bg-gradient-to-r from-pink-50 to-purple-50 border border-pink-200 rounded-lg p-4">
+            <div className="flex items-center gap-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-pink-400" />
+                <Input
+                  placeholder="Buscar por nombre, dirección, descripción... (ej: Tv. 3 #21-7, Montería)"
+                  className="pl-10 border-pink-300 focus:border-pink-500 focus:ring-pink-500"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                {isSearching && (
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-pink-500"></div>
+                  </div>
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowMapResults(false)
+                  setSearchResults([])
+                  setSearchTerm('')
+                }}
+                className="border-pink-300 text-pink-600 hover:bg-pink-50"
+              >
+                <X className="h-4 w-4 mr-1" />
+                Limpiar
+              </Button>
+            </div>
+            {searchTerm && (
+              <div className="mt-2 text-sm text-pink-600">
+                <Search className="h-3 w-3 inline mr-1" />
+                Buscando: "{searchTerm}"
+              </div>
+            )}
+          </div>
 
           {/* Lista de lugares */}
           <motion.div 
             className="space-y-3"
             variants={containerVariants}
           >
+            {/* Información de búsqueda */}
+            {showMapResults && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+                <div className="flex items-center gap-2 text-yellow-800">
+                  <Map className="h-4 w-4" />
+                  <span className="font-medium">Búsqueda activa</span>
+                </div>
+                <p className="text-yellow-600 text-sm mt-1">
+                  Los resultados de búsqueda se muestran en el mapa arriba. Aquí puedes ver todos los lugares guardados.
+                </p>
+              </div>
+            )}
             {filteredPlaces.map((place, index) => (
               <motion.div
                 key={place.id}
@@ -584,12 +968,24 @@ export function RecuerdosSection() {
               >
                 <Card className="hover:shadow-md transition-shadow cursor-pointer">
                   <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      {/* Imagen del lugar */}
+                      {place.image_url && (
+                        <div className="flex-shrink-0">
+                          <img 
+                            src={place.image_url} 
+                            alt={place.name}
+                            className="w-16 h-16 object-cover rounded-lg border"
+                          />
+                        </div>
+                      )}
+                      
                       <div className="flex-1">
                         <h3 className="font-bold text-lg">{place.name}</h3>
-                        <p className="text-sm text-gray-600">{place.date}</p>
+                        <p className="text-sm text-gray-600">{place.visit_date || 'Próximamente'}</p>
                         <p className="text-sm text-gray-500">{place.address}</p>
                       </div>
+                      
                       <div className="flex items-center gap-3">
                         <Badge 
                           variant="secondary" 
@@ -667,8 +1063,9 @@ export function RecuerdosSection() {
                   Fecha
                 </label>
                 <Input
-                  value={editingMilestone.date}
-                  onChange={(e) => setEditingMilestone(prev => prev ? {...prev, date: e.target.value} : null)}
+                  type="date"
+                  value={editingMilestone.date_taken}
+                  onChange={(e) => setEditingMilestone(prev => prev ? {...prev, date_taken: e.target.value} : null)}
                   placeholder="Fecha del evento"
                 />
               </div>
@@ -678,7 +1075,7 @@ export function RecuerdosSection() {
                   Descripción
                 </label>
                 <textarea
-                  value={editingMilestone.description}
+                  value={editingMilestone.description || ''}
                   onChange={(e) => setEditingMilestone(prev => prev ? {...prev, description: e.target.value} : null)}
                   placeholder="Descripción del evento"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
@@ -688,13 +1085,79 @@ export function RecuerdosSection() {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  URL de la imagen
+                  Imagen del Hito
                 </label>
+                
+                {/* Preview de imagen actual */}
+                {editingMilestone.image_url && !imagePreview && (
+                  <div className="mb-3">
+                    <img 
+                      src={editingMilestone.image_url} 
+                      alt="Imagen actual" 
+                      className="w-full h-32 object-cover rounded-lg border"
+                    />
+                  </div>
+                )}
+                
+                {/* Preview de nueva imagen */}
+                {imagePreview && (
+                  <div className="mb-3 relative">
+                    <img 
+                      src={imagePreview} 
+                      alt="Preview" 
+                      className="w-full h-32 object-cover rounded-lg border"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearImageSelection}
+                      className="absolute top-1 right-1 h-6 w-6 p-0 bg-white/80 hover:bg-white"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                )}
+                
+                {/* Input para subir imagen */}
+                <div className="space-y-2">
+                  <input
+                    id="image-upload"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageSelect}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => document.getElementById('image-upload')?.click()}
+                    className="w-full"
+                    disabled={uploadingImage}
+                  >
+                    {uploadingImage ? (
+                      <div className="flex items-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-pink-500"></div>
+                        Subiendo...
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Upload className="h-4 w-4" />
+                        {imagePreview ? 'Cambiar imagen' : 'Subir imagen'}
+                      </div>
+                    )}
+                  </Button>
+                  
+                  {/* URL manual como alternativa */}
+                  <div className="text-xs text-gray-500">
+                    O ingresa una URL:
+                  </div>
                 <Input
-                  value={editingMilestone.image}
-                  onChange={(e) => setEditingMilestone(prev => prev ? {...prev, image: e.target.value} : null)}
-                  placeholder="URL de la imagen"
-                />
+                    value={editingMilestone.image_url || ''}
+                    onChange={(e) => setEditingMilestone(prev => prev ? {...prev, image_url: e.target.value} : null)}
+                    placeholder="URL de la imagen (opcional)"
+                  />
+                </div>
               </div>
               
               <div>
@@ -703,7 +1166,7 @@ export function RecuerdosSection() {
                 </label>
                 <select
                   value={editingMilestone.type}
-                  onChange={(e) => setEditingMilestone(prev => prev ? {...prev, type: e.target.value} : null)}
+                  onChange={(e) => setEditingMilestone(prev => prev ? {...prev, type: e.target.value as any} : null)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 >
                   <option value="eventos">Eventos</option>
@@ -812,11 +1275,12 @@ export function RecuerdosSection() {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Fecha
+                  Fecha de Visita
                 </label>
                 <Input
-                  value={editingPlace.date}
-                  onChange={(e) => setEditingPlace(prev => prev ? {...prev, date: e.target.value} : null)}
+                  type="date"
+                  value={editingPlace.visit_date || ''}
+                  onChange={(e) => setEditingPlace(prev => prev ? {...prev, visit_date: e.target.value} : null)}
                   placeholder="Fecha de visita o planificación"
                 />
               </div>
@@ -826,10 +1290,87 @@ export function RecuerdosSection() {
                   Dirección
                 </label>
                 <Input
-                  value={editingPlace.address}
+                  value={editingPlace.address || ''}
                   onChange={(e) => setEditingPlace(prev => prev ? {...prev, address: e.target.value} : null)}
                   placeholder="Dirección del lugar"
                 />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Imagen del Lugar
+                </label>
+                
+                {/* Preview de imagen actual */}
+                {editingPlace.image_url && !imagePreview && (
+                  <div className="mb-3">
+                    <img 
+                      src={editingPlace.image_url} 
+                      alt="Imagen actual" 
+                      className="w-full h-32 object-cover rounded-lg border"
+                    />
+                  </div>
+                )}
+                
+                {/* Preview de nueva imagen */}
+                {imagePreview && (
+                  <div className="mb-3 relative">
+                    <img 
+                      src={imagePreview} 
+                      alt="Preview" 
+                      className="w-full h-32 object-cover rounded-lg border"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearImageSelection}
+                      className="absolute top-1 right-1 h-6 w-6 p-0 bg-white/80 hover:bg-white"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                )}
+                
+                {/* Input para subir imagen */}
+                <div className="space-y-2">
+                  <input
+                    id="place-image-upload"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageSelect}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => document.getElementById('place-image-upload')?.click()}
+                    className="w-full"
+                    disabled={uploadingImage}
+                  >
+                    {uploadingImage ? (
+                      <div className="flex items-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-pink-500"></div>
+                        Subiendo...
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Upload className="h-4 w-4" />
+                        {imagePreview ? 'Cambiar imagen' : 'Subir imagen'}
+                      </div>
+                    )}
+                  </Button>
+                  
+                  {/* URL manual como alternativa */}
+                  <div className="text-xs text-gray-500">
+                    O ingresa una URL:
+                  </div>
+                  <Input
+                    value={editingPlace.image_url || ''}
+                    onChange={(e) => setEditingPlace(prev => prev ? {...prev, image_url: e.target.value} : null)}
+                    placeholder="URL de la imagen (opcional)"
+                  />
+                </div>
               </div>
               
               <div>
@@ -838,7 +1379,7 @@ export function RecuerdosSection() {
                 </label>
                 <select
                   value={editingPlace.status}
-                  onChange={(e) => setEditingPlace(prev => prev ? {...prev, status: e.target.value} : null)}
+                  onChange={(e) => setEditingPlace(prev => prev ? {...prev, status: e.target.value as any} : null)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                 >
                   <option value="visitado">Visitado</option>

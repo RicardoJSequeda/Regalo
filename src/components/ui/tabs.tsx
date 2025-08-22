@@ -11,6 +11,7 @@ const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
 >(({ className, ...props }, ref) => (
+  // @ts-ignore
   <TabsPrimitive.List
     ref={ref}
     className={cn(
@@ -26,6 +27,7 @@ const TabsTrigger = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
 >(({ className, ...props }, ref) => (
+  // @ts-ignore
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
@@ -41,6 +43,7 @@ const TabsContent = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content>
 >(({ className, ...props }, ref) => (
+  // @ts-ignore
   <TabsPrimitive.Content
     ref={ref}
     className={cn(

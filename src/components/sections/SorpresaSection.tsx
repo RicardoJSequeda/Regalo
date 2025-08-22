@@ -1,11 +1,15 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { ImageUpload } from '@/components/ui/file-upload'
+import { SurpriseCard } from '@/components/ui/surprise-card'
+import { FilterChips } from '@/components/ui/filter-chips'
+import { AchievementProgress } from '@/components/ui/achievement-progress'
 import { 
   Gift, 
   Sparkles, 
@@ -44,1458 +48,1037 @@ import {
   Volume2,
   VolumeX
 } from 'lucide-react'
-import { useLocalStorage } from '@/hooks/useLocalStorage'
+import { getBrowserClient } from '@/lib/supabase/browser-client'
+import { SurpriseBox, SurpriseAchievement, UnlockProgress } from '@/types'
+import confetti from 'canvas-confetti'
 
-interface SurpriseContent {
-  type: 'text' | 'image' | 'video' | 'invitation' | 'event' | 'mixed'
-  title: string
-  description: string
-  content: string
-  imageUrl?: string
-  videoUrl?: string
-  eventDate?: string
-  eventLocation?: string
-  eventMapLink?: string
-  blocks?: Array<{
-    type: 'text' | 'image' | 'video'
-    content: string
-    order: number
-  }>
-}
-
-interface SurpriseBox {
-  id: string
-  title: string
-  description: string
-  coverImage?: string
-  category: 'foto' | 'texto' | 'invitacion' | 'evento' | 'mixto'
-  isUnlocked: boolean
-  unlockType: 'key' | 'date' | 'sequential' | 'free'
-  unlockDate?: string
-  unlockTime?: string
-  requiredKey?: string
-  dependsOn?: string
-  sequentialOrder?: number
-  content: SurpriseContent
-  createdAt: string
-  unlockedAt?: string
-  order: number
-  effects?: {
-    confetti?: boolean
-    sound?: string
-    animation?: string
-  }
-  previewMessage?: string
-  achievements?: string[]
-}
-
-interface Achievement {
-  id: string
-  title: string
-  description: string
-  icon: string
-  unlockedAt?: string
-  requirement: number
-}
-
-const defaultSurprises: SurpriseBox[] = [
-  {
-    id: '1',
-    title: 'Mensaje Secreto',
-    description: 'Un mensaje especial lleno de amor y cariño',
-    category: 'texto',
-    isUnlocked: true,
-    unlockType: 'free',
-    content: {
-      type: 'text',
-      title: 'Mi Amor Eterno',
-      description: 'Un mensaje que viene desde lo más profundo de mi corazón',
-      content: 'Mi querido amor, cada día que pasa a tu lado es un regalo que atesoro con todo mi corazón. Desde el momento en que nuestros ojos se encontraron, supe que mi vida cambiaría para siempre. Tu sonrisa ilumina mis días más oscuros y tu amor me da la fuerza para enfrentar cualquier desafío. Eres mi compañero perfecto, mi mejor amigo y el amor de mi vida. Te amo más de lo que las palabras pueden expresar.'
-    },
-    createdAt: '2024-01-01',
-    unlockedAt: '2024-01-01',
-    order: 1,
-    effects: {
-      confetti: true,
-      sound: 'magic-chime.mp3'
-    }
-  },
-  {
-    id: '2',
-    title: 'Video Recopilatorio',
-    description: 'Nuestros momentos más especiales en video',
-    category: 'mixto',
-    isUnlocked: false,
-    unlockType: 'date',
-    unlockDate: '2024-12-25',
-    unlockTime: '00:00',
-    content: {
-      type: 'mixed',
-      title: 'Nuestros Momentos Especiales',
-      description: 'Una recopilación de todos nuestros momentos más hermosos juntos',
-      content: 'Video especial de nuestros recuerdos',
-      videoUrl: 'https://example.com/video-special.mp4',
-      blocks: [
-        {
-          type: 'text',
-          content: 'Este video contiene todos nuestros momentos más especiales juntos...',
-          order: 1
-        },
-        {
-          type: 'video',
-          content: 'https://example.com/video-special.mp4',
-          order: 2
-        }
-      ]
-    },
-    createdAt: '2024-01-01',
-    order: 2,
-    previewMessage: '¡Faltan solo 30 días para descubrir este video especial!',
-    effects: {
-      confetti: true,
-      animation: 'slide-up'
-    }
-  },
-  {
-    id: '3',
-    title: 'Nuestro Álbum de Recuerdos',
-    description: 'Fotos de nuestros momentos más especiales',
-    category: 'foto',
-    isUnlocked: false,
-    unlockType: 'sequential',
-    dependsOn: '1',
-    sequentialOrder: 2,
-    content: {
-      type: 'image',
-      title: 'Álbum de Amor',
-      description: 'Una colección de fotos que cuentan nuestra historia',
-      content: 'Colección de fotos especiales',
-      imageUrl: '/api/placeholder/400/300'
-    },
-    createdAt: '2024-01-01',
-    order: 3,
-    effects: {
-      confetti: true
-    }
-  },
-  {
-    id: '4',
-    title: 'Cena Romántica',
-    description: 'Una invitación para una cena especial',
-    category: 'invitacion',
-    isUnlocked: false,
-    unlockType: 'key',
-    requiredKey: 'AMOR2024',
-    content: {
-      type: 'invitation',
-      title: 'Cena Romántica',
-      description: 'Te invito a una cena especial solo para nosotros',
-      content: 'Reserva confirmada en el restaurante más romántico de la ciudad',
-      eventDate: '2024-02-14',
-      eventLocation: 'Restaurante El Amor',
-      eventMapLink: 'https://maps.google.com/?q=restaurante+romantico'
-    },
-    createdAt: '2024-01-01',
-    order: 4,
-    previewMessage: '¡Ingresa la llave especial para descubrir esta sorpresa!',
-    effects: {
-      confetti: true,
-      sound: 'romantic-chime.mp3'
-    }
-  },
-  {
-    id: '5',
-    title: 'Viaje Sorpresa',
-    description: 'Un viaje inolvidable para los dos',
-    category: 'evento',
-    isUnlocked: false,
-    unlockType: 'date',
-    unlockDate: '2024-06-15',
-    unlockTime: '09:00',
-    content: {
-      type: 'event',
-      title: 'Viaje a la Playa',
-      description: 'Un fin de semana romántico en la playa',
-      content: 'Reserva confirmada en el hotel más hermoso frente al mar',
-      eventDate: '2024-06-15',
-      eventLocation: 'Playa del Amor, Cancún',
-      eventMapLink: 'https://maps.google.com/?q=cancun+beach+hotel'
-    },
-    createdAt: '2024-01-01',
-    order: 5,
-    previewMessage: '¡Faltan solo 165 días para este viaje sorpresa!',
-    effects: {
-      confetti: true,
-      animation: 'zoom-in'
-    }
-  },
-  {
-    id: '6',
-    title: 'Poema Personalizado',
-    description: 'Un poema escrito especialmente para ti',
-    category: 'texto',
-    isUnlocked: false,
-    unlockType: 'sequential',
-    dependsOn: '3',
-    sequentialOrder: 3,
-    content: {
-      type: 'text',
-      title: 'Poema de Amor',
-      description: 'Versos que nacieron de mi corazón para ti',
-      content: 'En cada amanecer veo tu sonrisa,\nEn cada atardecer siento tu amor,\nEres mi inspiración, mi alegría,\nMi compañero, mi tesoro, mi flor.\n\nCada día a tu lado es un regalo,\nCada momento contigo es especial,\nTu amor me hace sentir completo,\nEres mi presente y mi futuro ideal.'
-    },
-    createdAt: '2024-01-01',
-    order: 6,
-    effects: {
-      confetti: true
-    }
-  },
-  {
-    id: '7',
-    title: 'Regalo Especial',
-    description: 'Un regalo que te hará sonreír',
-    category: 'mixto',
-    isUnlocked: false,
-    unlockType: 'key',
-    requiredKey: 'FELICIDAD',
-    content: {
-      type: 'mixed',
-      title: 'Regalo del Corazón',
-      description: 'Un regalo que elegí especialmente para ti',
-      content: 'Te he preparado un regalo muy especial que sé que te encantará.',
-      blocks: [
-        {
-          type: 'text',
-          content: 'Te he preparado un regalo muy especial que sé que te encantará. Es algo que has estado deseando y que representa todo mi amor por ti.',
-          order: 1
-        },
-        {
-          type: 'image',
-          content: '/api/placeholder/300/200',
-          order: 2
-        }
-      ]
-    },
-    createdAt: '2024-01-01',
-    order: 7,
-    previewMessage: '¡Encuentra la llave de la felicidad!',
-    effects: {
-      confetti: true,
-      sound: 'gift-open.mp3'
-    }
-  },
-  {
-    id: '8',
-    title: 'Canción Dedicada',
-    description: 'Una canción compuesta especialmente para ti',
-    category: 'mixto',
-    isUnlocked: false,
-    unlockType: 'date',
-    unlockDate: '2024-08-20',
-    unlockTime: '20:00',
-    content: {
-      type: 'mixed',
-      title: 'Canción de Amor',
-      description: 'Una canción que compuse pensando en ti',
-      content: 'Dedicada especialmente para ti',
-      videoUrl: 'https://example.com/song-dedicated.mp4',
-      blocks: [
-        {
-          type: 'text',
-          content: 'Esta canción la compuse pensando en ti, en nuestro amor...',
-          order: 1
-        },
-        {
-          type: 'video',
-          content: 'https://example.com/song-dedicated.mp4',
-          order: 2
-        }
-      ]
-    },
-    createdAt: '2024-01-01',
-    order: 8,
-    previewMessage: '¡Faltan solo 240 días para escuchar tu canción!',
-    effects: {
-      confetti: true,
-      sound: 'music-note.mp3',
-      animation: 'fade-in'
-    }
-  },
-  {
-    id: '9',
-    title: 'Sorpresa Final',
-    description: 'La sorpresa más especial de todas',
-    category: 'evento',
-    isUnlocked: false,
-    unlockType: 'sequential',
-    dependsOn: '8',
-    sequentialOrder: 4,
-    content: {
-      type: 'event',
-      title: 'Propuesta de Matrimonio',
-      description: 'El momento más especial de nuestras vidas',
-      content: 'Te propongo pasar el resto de nuestras vidas juntos, amándonos cada día más.',
-      eventDate: '2024-12-31',
-      eventLocation: 'Lugar más especial para nosotros',
-      eventMapLink: 'https://maps.google.com/?q=special+place'
-    },
-    createdAt: '2024-01-01',
-    order: 9,
-    effects: {
-      confetti: true,
-      sound: 'wedding-bells.mp3',
-      animation: 'explosion'
-    }
-  }
-]
-
-const achievements: Achievement[] = [
-  {
-    id: 'first-unlock',
-    title: 'Primera Sorpresa',
-    description: 'Desbloqueaste tu primera sorpresa',
-    icon: '🎉',
-    requirement: 1
-  },
-  {
-    id: 'explorer',
-    title: 'Explorador',
-    description: 'Desbloqueaste 3 sorpresas',
-    icon: '🔍',
-    requirement: 3
-  },
-  {
-    id: 'collector',
-    title: 'Coleccionista',
-    description: 'Desbloqueaste 5 sorpresas',
-    icon: '📦',
-    requirement: 5
-  },
-  {
-    id: 'master',
-    title: 'Maestro del Amor',
-    description: 'Desbloqueaste todas las sorpresas',
-    icon: '👑',
-    requirement: 9
-  }
-]
-
-export function SorpresaSection() {
-  const { value: surprises, setValue: setSurprises } = useLocalStorage<SurpriseBox[]>('surprises', defaultSurprises)
-  const { value: unlockedAchievements, setValue: setUnlockedAchievements } = useLocalStorage<Achievement[]>('unlockedAchievements', [])
-  const [currentPage, setCurrentPage] = useState(1)
-  const [itemsPerPage] = useState(6)
-  const [showCreateModal, setShowCreateModal] = useState(false)
-  const [showUnlockModal, setShowUnlockModal] = useState(false)
-  const [showContentModal, setShowContentModal] = useState(false)
-  const [showAchievementsModal, setShowAchievementsModal] = useState(false)
+export default function SorpresaSection() {
+  const [surprises, setSurprises] = useState<SurpriseBox[]>([])
+  const [achievements, setAchievements] = useState<SurpriseAchievement[]>([])
+  const [unlockedAchievements, setUnlockedAchievements] = useState<SurpriseAchievement[]>([])
+  const [loading, setLoading] = useState(true)
   const [selectedSurprise, setSelectedSurprise] = useState<SurpriseBox | null>(null)
+  const [showUnlockModal, setShowUnlockModal] = useState(false)
   const [unlockKey, setUnlockKey] = useState('')
-  const [audioRef] = useState(useRef<HTMLAudioElement | null>(null))
-  const [confettiActive, setConfettiActive] = useState(false)
-  const [newSurprise, setNewSurprise] = useState({
-    title: '',
-    description: '',
-    coverImage: '',
-    category: 'texto' as const,
-    unlockType: 'free' as const,
-    unlockDate: '',
-    unlockTime: '00:00',
-    requiredKey: '',
-    dependsOn: '',
-    contentType: 'text' as const,
-    contentTitle: '',
-    contentDescription: '',
-    contentText: '',
-    eventDate: '',
-    eventLocation: '',
-    eventMapLink: '',
-    previewMessage: '',
-    effects: {
-      confetti: true,
-      sound: '',
-      animation: 'fade-in'
-    },
-    blocks: [] as Array<{type: 'text' | 'image' | 'video', content: string, order: number}>
-  })
-  const [uploadedFiles, setUploadedFiles] = useState<{[key: string]: File}>({})
-  const [isUploading, setIsUploading] = useState(false)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [editingSurprise, setEditingSurprise] = useState<SurpriseBox | null>(null)
+  const [currentView, setCurrentView] = useState<'grid' | 'list'>('grid')
+  const [filterCategory, setFilterCategory] = useState<string>('all')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [volume, setVolume] = useState(1)
+  const [isMuted, setIsMuted] = useState(false)
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false)
+  const [showAchievements, setShowAchievements] = useState(false)
+  const [unlockProgress, setUnlockProgress] = useState<UnlockProgress[]>([])
+  
+  const supabase = getBrowserClient()
 
-  // Persistir datos en localStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('surprises', JSON.stringify(surprises))
+  // Función simple para mostrar notificaciones
+  const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
+    if (type === 'error') {
+      alert(`Error: ${message}`)
+    } else {
+      alert(message)
     }
-  }, [surprises])
+  }
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('unlockedAchievements', JSON.stringify(unlockedAchievements))
+  // Calcular conteos de categorías
+  const getCategoryCounts = () => {
+    const counts: Record<string, number> = {
+      all: surprises.length,
+      texto: surprises.filter(s => s.category === 'texto').length,
+      foto: surprises.filter(s => s.category === 'foto').length,
+      invitacion: surprises.filter(s => s.category === 'invitacion').length,
+      evento: surprises.filter(s => s.category === 'evento').length,
+      mixto: surprises.filter(s => s.category === 'mixto').length
     }
-  }, [unlockedAchievements])
+    return counts
+  }
 
-  // Calcular estadísticas
-  const unlockedCount = surprises.filter(s => s.isUnlocked).length
-  const totalCount = surprises.length
-  const progressPercentage = Math.round((unlockedCount / totalCount) * 100)
-
-  // Paginación
-  const totalPages = Math.ceil(surprises.length / itemsPerPage)
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const endIndex = startIndex + itemsPerPage
-  const currentSurprises = surprises.slice(startIndex, endIndex)
-
-  // Verificar logros
+  // Cargar datos desde Supabase
   useEffect(() => {
-    const newAchievements = achievements.filter(achievement => {
-      const isUnlocked = unlockedCount >= achievement.requirement
-      const alreadyUnlocked = unlockedAchievements.some(a => a.id === achievement.id)
-      return isUnlocked && !alreadyUnlocked
-    })
-
-    if (newAchievements.length > 0) {
-      setUnlockedAchievements(prev => [...prev, ...newAchievements])
-      setShowAchievementsModal(true)
-    }
-  }, [unlockedCount, unlockedAchievements])
-
-  // Verificar desbloqueos por fecha
-  useEffect(() => {
-    const checkDateUnlocks = () => {
-      const now = new Date()
-      setSurprises(prev => prev.map(surprise => {
-        if (!surprise.isUnlocked && surprise.unlockType === 'date' && surprise.unlockDate) {
-          const unlockDateTime = new Date(`${surprise.unlockDate}T${surprise.unlockTime || '00:00'}`)
-          if (now >= unlockDateTime) {
-            return { ...surprise, isUnlocked: true, unlockedAt: now.toISOString() }
-          }
-        }
-        return surprise
-      }))
-    }
-
-    checkDateUnlocks()
-    const interval = setInterval(checkDateUnlocks, 60000) // Verificar cada minuto
-    return () => clearInterval(interval)
+    loadSurprises()
+    loadAchievements()
+    loadUnlockProgress()
   }, [])
 
-  // Verificar si una sorpresa puede ser desbloqueada
-  const canUnlock = (surprise: SurpriseBox) => {
-    if (surprise.isUnlocked) return false
-    
-    switch (surprise.unlockType) {
-      case 'date':
-        if (!surprise.unlockDate) return false
-        const unlockDateTime = new Date(`${surprise.unlockDate}T${surprise.unlockTime || '00:00'}`)
-        return new Date() >= unlockDateTime
-      case 'sequential':
-        const dependency = surprises.find(s => s.id === surprise.dependsOn)
-        return dependency?.isUnlocked || false
-      case 'key':
-      case 'free':
-        return true
-      default:
-        return false
+  // Suscripción en tiempo real para sorpresas
+  useEffect(() => {
+    const channel = supabase
+      .channel('surprises_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'surprises'
+        },
+        (payload) => {
+          console.log('Cambio en sorpresas:', payload)
+          loadSurprises()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [supabase])
+
+  // Suscripción en tiempo real para achievements
+  useEffect(() => {
+    const channel = supabase
+      .channel('achievements_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'achievements'
+        },
+        (payload) => {
+          console.log('Cambio en achievements:', payload)
+          loadAchievements()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [supabase])
+
+  const loadSurprises = async () => {
+    try {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('surprises')
+        .select('*')
+        .order('order', { ascending: true })
+
+      if (error) {
+        console.error('Error loading surprises:', error)
+        alert('Error al cargar las sorpresas')
+        return
+      }
+
+      setSurprises(data || [])
+    } catch (error) {
+      console.error('Error loading surprises:', error)
+      showNotification('Error al cargar las sorpresas', 'error')
+    } finally {
+      setLoading(false)
     }
   }
 
-  // Calcular tiempo restante para sorpresas con fecha
-  const getTimeRemaining = (surprise: SurpriseBox) => {
-    if (surprise.unlockType !== 'date' || !surprise.unlockDate) return null
+  const loadAchievements = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('achievements')
+        .select('*')
+        .order('requirement', { ascending: true })
+
+      if (error) {
+        console.error('Error loading achievements:', error)
+        return
+      }
+
+      setAchievements(data || [])
+      
+      // Filtrar achievements desbloqueados
+      const unlocked = data?.filter(achievement => achievement.unlockedAt) || []
+      setUnlockedAchievements(unlocked)
+    } catch (error) {
+      console.error('Error loading achievements:', error)
+    }
+  }
+
+  const loadUnlockProgress = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('unlock_progress')
+        .select('*')
+        .order('attemptedAt', { ascending: false })
+
+      if (error) {
+        console.error('Error loading unlock progress:', error)
+        return
+      }
+
+      setUnlockProgress(data || [])
+    } catch (error) {
+      console.error('Error loading unlock progress:', error)
+    }
+  }
+
+  const createSurprise = async (surpriseData: Omit<SurpriseBox, 'id' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      const { data, error } = await supabase
+        .from('surprises')
+        .insert([surpriseData])
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error creating surprise:', error)
+        showNotification('Error al crear la sorpresa', 'error')
+        return null
+      }
+
+      showNotification('Sorpresa creada exitosamente', 'success')
+      return data
+    } catch (error) {
+      console.error('Error creating surprise:', error)
+      showNotification('Error al crear la sorpresa', 'error')
+      return null
+    }
+  }
+
+  const updateSurprise = async (id: string, updates: Partial<SurpriseBox>) => {
+    try {
+      const { data, error } = await supabase
+        .from('surprises')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error updating surprise:', error)
+        showNotification('Error al actualizar la sorpresa', 'error')
+        return null
+      }
+
+      showNotification('Sorpresa actualizada exitosamente', 'success')
+      return data
+    } catch (error) {
+      console.error('Error updating surprise:', error)
+      showNotification('Error al actualizar la sorpresa', 'error')
+      return null
+    }
+  }
+
+  const deleteSurprise = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('surprises')
+        .delete()
+        .eq('id', id)
+
+      if (error) {
+        console.error('Error deleting surprise:', error)
+        showNotification('Error al eliminar la sorpresa', 'error')
+        return false
+      }
+
+      showNotification('Sorpresa eliminada exitosamente', 'success')
+      return true
+    } catch (error) {
+      console.error('Error deleting surprise:', error)
+      showNotification('Error al eliminar la sorpresa', 'error')
+      return false
+    }
+  }
+
+  const unlockSurprise = async (surprise: SurpriseBox, unlockMethod: 'key' | 'date' | 'sequential' | 'free') => {
+    try {
+      // Registrar intento de desbloqueo
+      await supabase
+        .from('unlock_progress')
+        .insert([{
+          surpriseId: surprise.id,
+          attemptType: unlockMethod,
+          wasSuccessful: true,
+          attemptedKey: unlockMethod === 'key' ? unlockKey : undefined
+        }])
+
+      // Actualizar sorpresa como desbloqueada
+      const updatedSurprise = await updateSurprise(surprise.id, {
+        isUnlocked: true,
+        unlockedAt: new Date().toISOString()
+      })
+
+      if (updatedSurprise) {
+        // Reproducir efectos
+        if (updatedSurprise.effects?.confetti) {
+          confetti({
+            particleCount: 100,
+            spread: 70,
+            origin: { y: 0.6 }
+          })
+        }
+
+        if (updatedSurprise.effects?.sound) {
+          // Aquí podrías reproducir un sonido
+          console.log('Reproduciendo sonido:', updatedSurprise.effects.sound)
+        }
+
+        showNotification('¡Sorpresa desbloqueada!', 'success')
+        setShowUnlockModal(false)
+        setUnlockKey('')
+        setSelectedSurprise(null)
+      }
+    } catch (error) {
+      console.error('Error unlocking surprise:', error)
+      showNotification('Error al desbloquear la sorpresa', 'error')
+    }
+  }
+
+  const checkUnlockConditions = (surprise: SurpriseBox): { canUnlock: boolean; reason?: string } => {
+    if (surprise.isUnlocked) {
+      return { canUnlock: false, reason: 'Ya está desbloqueada' }
+    }
     
-    const unlockDateTime = new Date(`${surprise.unlockDate}T${surprise.unlockTime || '00:00'}`)
+    switch (surprise.unlockType) {
+      case 'free':
+        return { canUnlock: true }
+      
+      case 'date':
+        if (!surprise.unlockDate) {
+          return { canUnlock: false, reason: 'Fecha de desbloqueo no definida' }
+        }
+        const unlockDate = new Date(surprise.unlockDate)
+        const now = new Date()
+        return {
+          canUnlock: now >= unlockDate,
+          reason: now < unlockDate ? `Disponible el ${unlockDate.toLocaleDateString()}` : undefined
+        }
+      
+      case 'sequential':
+        if (!surprise.dependsOn) {
+          return { canUnlock: true }
+        }
+        const dependsOnSurprise = surprises.find(s => s.id === surprise.dependsOn)
+        return {
+          canUnlock: dependsOnSurprise?.isUnlocked || false,
+          reason: !dependsOnSurprise?.isUnlocked ? 'Debes desbloquear la sorpresa anterior' : undefined
+        }
+      
+      case 'key':
+        return { canUnlock: true, reason: 'Ingresa la llave correcta' }
+      
+      default:
+        return { canUnlock: false, reason: 'Tipo de desbloqueo no válido' }
+    }
+  }
+
+  const getTimeUntilUnlock = (surprise: SurpriseBox): string => {
+    if (!surprise.unlockDate) return ''
+    
+    const unlockDate = new Date(surprise.unlockDate)
     const now = new Date()
-    const diff = unlockDateTime.getTime() - now.getTime()
+    const diff = unlockDate.getTime() - now.getTime()
     
-    if (diff <= 0) return null
+    if (diff <= 0) return '¡Disponible ahora!'
     
     const days = Math.floor(diff / (1000 * 60 * 60 * 24))
     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
     
-    return { days, hours, minutes }
+    if (days > 0) return `${days} días, ${hours} horas`
+    if (hours > 0) return `${hours} horas, ${minutes} minutos`
+    return `${minutes} minutos`
   }
 
-  // Reproducir efectos de sonido reales
-  const playEffects = (surprise: SurpriseBox) => {
-    if (surprise.effects?.sound) {
-      // Usar generador de audio sintético
-      const soundName = surprise.effects.sound.replace('.mp3', '')
-      if (typeof window !== 'undefined' && (window as any).playSound) {
-        (window as any).playSound(soundName)
+  const getUnlockProgress = (): number => {
+    if (surprises.length === 0) return 0
+    const unlockedCount = surprises.filter(s => s.isUnlocked).length
+    return (unlockedCount / surprises.length) * 100
+  }
+
+  const filteredSurprises = surprises.filter(surprise => {
+    const matchesCategory = filterCategory === 'all' || surprise.category === filterCategory
+    const matchesSearch = searchQuery === '' || 
+      surprise.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      surprise.description.toLowerCase().includes(searchQuery.toLowerCase())
+    return matchesCategory && matchesSearch
+  })
+
+  const handleUnlockAttempt = async () => {
+    if (!selectedSurprise) return
+
+    const unlockConditions = checkUnlockConditions(selectedSurprise)
+    
+    if (selectedSurprise.unlockType === 'key') {
+      if (unlockKey === selectedSurprise.requiredKey) {
+        await unlockSurprise(selectedSurprise, 'key')
       } else {
-        // Fallback: intentar cargar archivo de audio
-        const audio = new Audio(`/sounds/${surprise.effects.sound}`)
-        audio.volume = 0.5
-        audio.play().catch(e => console.log('Error playing sound:', e))
+        // Registrar intento fallido
+        await supabase
+          .from('unlock_progress')
+          .insert([{
+            surpriseId: selectedSurprise.id,
+            attemptType: 'key',
+            wasSuccessful: false,
+            attemptedKey: unlockKey
+          }])
+        
+        showNotification('Llave incorrecta', 'error')
+        setUnlockKey('')
       }
+    } else if (unlockConditions.canUnlock) {
+      await unlockSurprise(selectedSurprise, selectedSurprise.unlockType)
+    } else {
+      showNotification(unlockConditions.reason || 'No se puede desbloquear', 'error')
     }
-    
-    if (surprise.effects?.confetti) {
-      setConfettiActive(true)
-      setTimeout(() => setConfettiActive(false), 3000)
+  }
+
+  const handleDateUnlock = async (surprise: SurpriseBox) => {
+    const unlockConditions = checkUnlockConditions(surprise)
+    if (unlockConditions.canUnlock) {
+      await unlockSurprise(surprise, 'date')
+    } else {
+      showNotification(unlockConditions.reason || 'No se puede desbloquear', 'error')
     }
   }
 
-
-
-  // Crear nueva sorpresa
-  const createSurprise = () => {
-    if (!newSurprise.title || !newSurprise.contentTitle) return
-
-    const newSurpriseBox: SurpriseBox = {
-      id: Date.now().toString(),
-      title: newSurprise.title,
-      description: newSurprise.description,
-      coverImage: newSurprise.coverImage,
-      category: newSurprise.category,
-      isUnlocked: false,
-      unlockType: newSurprise.unlockType,
-      unlockDate: newSurprise.unlockDate,
-      unlockTime: newSurprise.unlockTime,
-      requiredKey: newSurprise.requiredKey,
-      dependsOn: newSurprise.dependsOn,
-      content: {
-        type: newSurprise.contentType,
-        title: newSurprise.contentTitle,
-        description: newSurprise.contentDescription,
-        content: newSurprise.contentText,
-        eventDate: newSurprise.eventDate,
-        eventLocation: newSurprise.eventLocation,
-        eventMapLink: newSurprise.eventMapLink,
-        blocks: newSurprise.blocks
-      },
-      createdAt: new Date().toISOString(),
-      order: surprises.length + 1,
-      effects: newSurprise.effects,
-      previewMessage: newSurprise.previewMessage
+  const handleSequentialUnlock = async (surprise: SurpriseBox) => {
+    const unlockConditions = checkUnlockConditions(surprise)
+    if (unlockConditions.canUnlock) {
+      await unlockSurprise(surprise, 'sequential')
+    } else {
+      showNotification(unlockConditions.reason || 'No se puede desbloquear', 'error')
     }
-
-    setSurprises(prev => [...prev, newSurpriseBox])
-    setShowCreateModal(false)
-    resetForm()
   }
 
-  // Resetear formulario
-  const resetForm = () => {
-    setNewSurprise({
-      title: '',
-      description: '',
-      coverImage: '',
-      category: 'texto',
-      unlockType: 'free',
-      unlockDate: '',
-      unlockTime: '00:00',
-      requiredKey: '',
-      dependsOn: '',
-      contentType: 'text',
-      contentTitle: '',
-      contentDescription: '',
-      contentText: '',
-      eventDate: '',
-      eventLocation: '',
-      eventMapLink: '',
-      previewMessage: '',
-      effects: {
-        confetti: true,
-        sound: '',
-        animation: 'fade-in'
-      },
-      blocks: []
-    })
-    setUploadedFiles({})
-  }
+  const renderSurpriseContent = (surprise: SurpriseBox) => {
+    const content = surprise.content
 
-  // Desbloquear sorpresa
-  const unlockSurprise = (surprise: SurpriseBox) => {
-    if (surprise.unlockType === 'key' && unlockKey !== surprise.requiredKey) {
-      alert('¡Llave incorrecta! Intenta de nuevo.')
-      return
+    switch (content.type) {
+      case 'text':
+  return (
+          <div className="space-y-4">
+            <h3 className="text-xl font-bold text-gray-900">{content.title}</h3>
+            <p className="text-gray-600">{content.description}</p>
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <pre className="whitespace-pre-wrap text-gray-800 font-medium">{content.content}</pre>
+      </div>
+          </div>
+        )
+
+      case 'image':
+        return (
+          <div className="space-y-4">
+            <h3 className="text-xl font-bold text-gray-900">{content.title}</h3>
+            <p className="text-gray-600">{content.description}</p>
+            {content.imageUrl && (
+              <div className="relative">
+                <img 
+                  src={content.imageUrl} 
+                  alt={content.title}
+                  className="w-full h-64 object-cover rounded-lg"
+                />
+              </div>
+            )}
+              </div>
+        )
+
+      case 'video':
+        return (
+          <div className="space-y-4">
+            <h3 className="text-xl font-bold text-gray-900">{content.title}</h3>
+            <p className="text-gray-600">{content.description}</p>
+            {content.videoUrl && (
+              <div className="relative">
+                <video 
+                  src={content.videoUrl}
+                  controls
+                  className="w-full h-64 object-cover rounded-lg"
+                />
+              </div>
+            )}
+            </div>
+        )
+
+      case 'invitation':
+          return (
+          <div className="space-y-4">
+            <h3 className="text-xl font-bold text-gray-900">{content.title}</h3>
+            <p className="text-gray-600">{content.description}</p>
+            <div className="bg-gradient-to-r from-pink-50 to-purple-50 p-6 rounded-lg border border-pink-200">
+              <div className="flex items-center gap-3 mb-4">
+                <Calendar className="h-6 w-6 text-pink-500" />
+                <span className="font-semibold text-gray-900">
+                  {content.eventDate ? new Date(content.eventDate).toLocaleDateString() : 'Fecha por confirmar'}
+                </span>
+              </div>
+              {content.eventLocation && (
+                <div className="flex items-center gap-3 mb-4">
+                  <MapPin className="h-5 w-5 text-pink-500" />
+                  <span className="text-gray-700">{content.eventLocation}</span>
+                </div>
+              )}
+              {content.eventMapLink && (
+                <Button 
+                  onClick={() => window.open(content.eventMapLink, '_blank')}
+                  className="bg-pink-500 hover:bg-pink-600"
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Ver en mapa
+                </Button>
+                    )}
+                  </div>
+                </div>
+        )
+
+      case 'event':
+        return (
+          <div className="space-y-4">
+            <h3 className="text-xl font-bold text-gray-900">{content.title}</h3>
+            <p className="text-gray-600">{content.description}</p>
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg border border-blue-200">
+              <div className="flex items-center gap-3 mb-4">
+                <Calendar className="h-6 w-6 text-blue-500" />
+                <span className="font-semibold text-gray-900">
+                  {content.eventDate ? new Date(content.eventDate).toLocaleDateString() : 'Fecha por confirmar'}
+                </span>
+              </div>
+              {content.eventLocation && (
+                <div className="flex items-center gap-3 mb-4">
+                  <MapPin className="h-5 w-5 text-blue-500" />
+                  <span className="text-gray-700">{content.eventLocation}</span>
+                  </div>
+                )}
+              {content.eventMapLink && (
+                <Button 
+                  onClick={() => window.open(content.eventMapLink, '_blank')}
+                  className="bg-blue-500 hover:bg-blue-600"
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Ver en mapa
+                </Button>
+              )}
+                  </div>
+          </div>
+        )
+
+      case 'mixed':
+        return (
+          <div className="space-y-4">
+            <h3 className="text-xl font-bold text-gray-900">{content.title}</h3>
+            <p className="text-gray-600">{content.description}</p>
+            {content.blocks && (
+              <div className="space-y-4">
+                {content.blocks.sort((a, b) => a.order - b.order).map((block, index) => (
+                  <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                    {block.type === 'text' && (
+                      <p className="text-gray-800">{block.content}</p>
+                    )}
+                    {block.type === 'image' && (
+                      <img 
+                        src={block.content} 
+                        alt={`Imagen ${index + 1}`}
+                        className="w-full h-48 object-cover rounded-lg"
+                      />
+                    )}
+                    {block.type === 'video' && (
+                      <video 
+                        src={block.content}
+                        controls
+                        className="w-full h-48 object-cover rounded-lg"
+                      />
+                    )}
+                  </div>
+                ))}
+                    </div>
+                  )}
+          </div>
+        )
+
+      default:
+        return <p className="text-gray-600">Contenido no disponible</p>
     }
-
-    setSurprises(prev => prev.map(s => 
-      s.id === surprise.id 
-        ? { ...s, isUnlocked: true, unlockedAt: new Date().toISOString() }
-        : s
-    ))
-    setShowUnlockModal(false)
-    setUnlockKey('')
-    setSelectedSurprise(null)
-    
-    // Reproducir efectos
-    playEffects(surprise)
-    
-    // Mostrar contenido después de desbloquear
-    setTimeout(() => {
-      setSelectedSurprise(surprise)
-      setShowContentModal(true)
-    }, 500)
   }
 
-  // Abrir modal de desbloqueo
-  const openUnlockModal = (surprise: SurpriseBox) => {
-    setSelectedSurprise(surprise)
-    setShowUnlockModal(true)
-  }
-
-  // Abrir contenido de sorpresa
-  const openSurpriseContent = (surprise: SurpriseBox) => {
-    setSelectedSurprise(surprise)
-    setShowContentModal(true)
-    playEffects(surprise)
-  }
-
-  // Obtener icono de categoría
   const getCategoryIcon = (category: string) => {
     switch (category) {
-      case 'foto': return <Camera className="h-4 w-4" />
-      case 'texto': return <FileText className="h-4 w-4" />
-      case 'invitacion': return <Calendar className="h-4 w-4" />
-      case 'evento': return <MapPin className="h-4 w-4" />
-      case 'mixto': return <Star className="h-4 w-4" />
-      default: return <Gift className="h-4 w-4" />
+      case 'foto': return <Camera className="h-5 w-5" />
+      case 'texto': return <FileText className="h-5 w-5" />
+      case 'invitacion': return <Calendar className="h-5 w-5" />
+      case 'evento': return <MapPin className="h-5 w-5" />
+      case 'mixto': return <Sparkles className="h-5 w-5" />
+      default: return <Gift className="h-5 w-5" />
     }
   }
 
-  // Obtener color de categoría
   const getCategoryColor = (category: string) => {
     switch (category) {
-      case 'foto': return 'bg-blue-100 text-blue-800 border-blue-200'
-      case 'texto': return 'bg-green-100 text-green-800 border-green-200'
-      case 'invitacion': return 'bg-purple-100 text-purple-800 border-purple-200'
-      case 'evento': return 'bg-orange-100 text-orange-800 border-orange-200'
-      case 'mixto': return 'bg-pink-100 text-pink-800 border-pink-200'
-      default: return 'bg-gray-100 text-gray-800 border-gray-200'
+      case 'foto': return 'bg-blue-100 text-blue-800'
+      case 'texto': return 'bg-green-100 text-green-800'
+      case 'invitacion': return 'bg-purple-100 text-purple-800'
+      case 'evento': return 'bg-orange-100 text-orange-800'
+      case 'mixto': return 'bg-pink-100 text-pink-800'
+      default: return 'bg-gray-100 text-gray-800'
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500"></div>
+                </div>
+    )
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="text-center space-y-2">
-        <h1 className="text-4xl font-bold text-gray-800">Nuestras Sorpresas</h1>
-        <p className="text-gray-600 text-lg">
-          Pequeños gestos de amor que te harán sonreír y recordar lo especial que eres para mí
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+            <Gift className="h-8 w-8 text-pink-500" />
+            Sorpresas Especiales
+          </h1>
+          <p className="text-gray-600 mt-2">
+            Descubre sorpresas llenas de amor y momentos especiales
+          </p>
       </div>
 
-      {/* Estadísticas */}
-      <Card className="surprise-stats">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex gap-8">
-              <div className="text-center">
-                <div className="text-3xl font-bold text-green-600">{unlockedCount}</div>
-                <div className="text-sm text-gray-600">Desbloqueadas</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-orange-600">{totalCount - unlockedCount}</div>
-                <div className="text-sm text-gray-600">Por descubrir</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-pink-600">{totalCount}</div>
-                <div className="text-sm text-gray-600">Total</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <Trophy className="h-6 w-6 text-pink-500" />
-              <span className="text-lg font-semibold text-gray-700">{progressPercentage}% completado</span>
-            </div>
-          </div>
-          <div className="mt-4">
-            <Progress value={progressPercentage} className="surprise-progress h-3" />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Grid de Sorpresas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {currentSurprises.map((surprise) => {
-          const timeRemaining = getTimeRemaining(surprise)
-          const canUnlockSurprise = canUnlock(surprise)
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => setShowAchievements(!showAchievements)}
+            variant="outline"
+            className="flex items-center gap-2"
+          >
+            <Trophy className="h-4 w-4" />
+            Logros ({unlockedAchievements.length}/{achievements.length})
+          </Button>
           
-          return (
-            <Card 
-              key={surprise.id}
-              className={`surprise-card transition-all duration-300 ${
-                surprise.isUnlocked 
-                  ? 'unlocked' 
-                  : canUnlockSurprise
-                  ? 'hover:scale-105 cursor-pointer'
-                  : 'opacity-60'
-              }`}
-            >
-              <CardContent className="p-6 relative">
-                {/* Iconos superiores */}
-                <div className="flex justify-between items-start mb-4">
-                  <Sparkles className="surprise-icon h-6 w-6 text-yellow-500" />
-                  <div className="flex items-center gap-2">
-                    {getCategoryIcon(surprise.category)}
-                    {!surprise.isUnlocked && (
-                      <Lock className="h-4 w-4 text-green-500" />
-                    )}
-                  </div>
-                </div>
+          <Button
+            onClick={() => setShowAddModal(true)}
+            className="bg-pink-500 hover:bg-pink-600"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Nueva Sorpresa
+          </Button>
+        </div>
+      </div>
 
-                {/* Imagen de portada */}
-                {surprise.coverImage && (
-                  <div className="mb-4 h-32 bg-gray-200 rounded-lg flex items-center justify-center">
-                    <Image className="h-8 w-8 text-gray-400" />
-                  </div>
-                )}
+      {/* Achievement Progress */}
+      <AchievementProgress
+        achievements={achievements}
+        unlockedAchievements={unlockedAchievements}
+        onToggleAchievements={() => setShowAchievements(!showAchievements)}
+        showAchievements={showAchievements}
+      />
+          
+      {/* Filters and Search */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        <FilterChips
+          selectedCategory={filterCategory}
+          onCategoryChange={setFilterCategory}
+          counts={getCategoryCounts()}
+        />
+        
+        <div className="flex-1">
+          <Input
+            placeholder="Buscar sorpresas..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="max-w-md"
+          />
+        </div>
+              
+        <div className="flex gap-2">
+          <Button
+            variant={currentView === 'grid' ? 'default' : 'outline'}
+            onClick={() => setCurrentView('grid')}
+            size="sm"
+          >
+            <div className="grid grid-cols-2 gap-1">
+              <div className="w-2 h-2 bg-current rounded"></div>
+              <div className="w-2 h-2 bg-current rounded"></div>
+              <div className="w-2 h-2 bg-current rounded"></div>
+              <div className="w-2 h-2 bg-current rounded"></div>
+            </div>
+          </Button>
+          <Button
+            variant={currentView === 'list' ? 'default' : 'outline'}
+            onClick={() => setCurrentView('list')}
+            size="sm"
+          >
+            <div className="space-y-1">
+              <div className="w-4 h-2 bg-current rounded"></div>
+              <div className="w-4 h-2 bg-current rounded"></div>
+              <div className="w-4 h-2 bg-current rounded"></div>
+            </div>
+          </Button>
+        </div>
+      </div>
 
-                {/* Contenido */}
-                <div className="space-y-3">
-                  <h3 className="text-xl font-semibold text-gray-800">{surprise.title}</h3>
-                  <p className="text-gray-600 text-sm">{surprise.description}</p>
-                  
-                  {/* Categoría */}
-                  <div className={`inline-block px-2 py-1 rounded-full text-xs font-medium border ${getCategoryColor(surprise.category)}`}>
-                    {surprise.category.charAt(0).toUpperCase() + surprise.category.slice(1)}
-                  </div>
-                  
-                  {/* Estado de desbloqueo */}
-                  <div className="text-xs text-gray-500">
-                    {surprise.isUnlocked ? (
-                      <span className="text-green-600 flex items-center gap-1">
-                        <Check className="h-3 w-3" />
-                        Desbloqueada: Disponible ahora
-                      </span>
-                    ) : (
-                      <span className="text-orange-600 flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {surprise.unlockType === 'date' && timeRemaining && (
-                          `${timeRemaining.days}d ${timeRemaining.hours}h ${timeRemaining.minutes}m`
-                        )}
-                        {surprise.unlockType === 'key' && 'Requiere llave especial'}
-                        {surprise.unlockType === 'sequential' && 'Requiere desbloquear otra sorpresa'}
-                        {surprise.unlockType === 'free' && 'Disponible manualmente'}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Mensaje previo */}
-                  {!surprise.isUnlocked && surprise.previewMessage && (
-                    <div className="text-xs text-pink-600 bg-pink-50 p-2 rounded">
-                      {surprise.previewMessage}
-                    </div>
-                  )}
-
-                  {/* Botón de acción */}
-                  <Button
-                    onClick={() => {
-                      if (surprise.isUnlocked) {
-                        openSurpriseContent(surprise)
-                      } else if (canUnlockSurprise) {
-                        openUnlockModal(surprise)
-                      }
-                    }}
-                    disabled={!surprise.isUnlocked && !canUnlockSurprise}
-                    className={`w-full ${
-                      surprise.isUnlocked 
-                        ? 'bg-pink-500 hover:bg-pink-600' 
-                        : canUnlockSurprise
-                        ? 'bg-orange-500 hover:bg-orange-600'
-                        : 'bg-gray-300 cursor-not-allowed'
-                    } text-white transition-all duration-200`}
+      {/* Achievements Panel */}
+      {showAchievements && (
+        <div className="bg-white p-6 rounded-lg border">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <Trophy className="h-5 w-5 text-yellow-500" />
+                Logros Desbloqueados
+              </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {achievements.map((achievement) => (
+                  <div
+                    key={achievement.id}
+                className={`p-4 rounded-lg border ${
+                  achievement.unlockedAt 
+                    ? 'bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-200' 
+                    : 'bg-gray-50 border-gray-200'
+                    }`}
                   >
-                    <Heart className="h-4 w-4 mr-2" />
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    {surprise.isUnlocked ? 'Abrir Sorpresa' : 'Desbloquear'}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
-
-      {/* Paginación */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          <Button
-            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-            disabled={currentPage === 1}
-            variant="outline"
-            size="sm"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          
-          <span className="text-sm text-gray-600">
-            Página {currentPage} de {totalPages}
-          </span>
-          
-          <Button
-            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-            disabled={currentPage === totalPages}
-            variant="outline"
-            size="sm"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+                    <div className="flex items-center gap-3">
+                  <span className="text-2xl">{achievement.icon}</span>
+                      <div className="flex-1">
+                    <h4 className="font-medium text-gray-900">{achievement.title}</h4>
+                        <p className="text-sm text-gray-600">{achievement.description}</p>
+                    {achievement.unlockedAt && (
+                        <p className="text-xs text-gray-500 mt-1">
+                        Desbloqueado: {new Date(achievement.unlockedAt).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+            </div>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* Botones de acción */}
-      <div className="flex justify-center gap-4">
-        <Button
-          onClick={() => setShowCreateModal(true)}
-          className="create-surprise-button"
+      {/* Surprises Grid/List */}
+      {currentView === 'grid' ? (
+        <motion.div 
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+          variants={{
+            hidden: { opacity: 0 },
+            visible: {
+              opacity: 1,
+              transition: {
+                staggerChildren: 0.1
+              }
+            }
+          }}
+          initial="hidden"
+          animate="visible"
         >
-          <Plus className="h-4 w-4 mr-2" />
-          Crear Nueva Sorpresa
-        </Button>
-        
-        <Button
-          onClick={() => setShowAchievementsModal(true)}
-          variant="outline"
-          className="border-pink-200 text-pink-600 hover:bg-pink-50"
-        >
-          <Trophy className="h-4 w-4 mr-2" />
-          Ver Logros ({unlockedAchievements.length})
-        </Button>
-      </div>
-
-      {/* Confeti */}
-      {confettiActive && (
-        <div className="fixed inset-0 pointer-events-none z-50">
-          {Array.from({ length: 50 }).map((_, i) => (
-            <div
-              key={i}
-              className="absolute animate-bounce"
-              style={{
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 100}%`,
-                animationDelay: `${Math.random() * 2}s`,
-                animationDuration: `${1 + Math.random() * 2}s`
+          {filteredSurprises.map((surprise) => (
+            <SurpriseCard
+              key={surprise.id}
+              surprise={surprise}
+              onView={setSelectedSurprise}
+              onUnlock={(surprise) => {
+                setSelectedSurprise(surprise)
+                setShowUnlockModal(true)
               }}
-            >
-              {['🎉', '🎊', '✨', '💖', '🎁', '⭐'][Math.floor(Math.random() * 6)]}
+              getCategoryColor={getCategoryColor}
+              getCategoryIcon={getCategoryIcon}
+              getTimeUntilUnlock={getTimeUntilUnlock}
+              isGridView={true}
+            />
+          ))}
+        </motion.div>
+                      >
+                        <Unlock className="h-4 w-4 mr-1" />
+                        Desbloquear
+                      </Button>
+                    )}
+                          </div>
+                        </div>
+              </CardContent>
+            </Card>
+          ))}
+                          </div>
+      ) : (
+        <div className="space-y-4">
+          {filteredSurprises.map((surprise) => (
+            <Card key={surprise.id} className="overflow-hidden">
+              <CardContent className="p-6">
+                <div className="flex items-start gap-4">
+                  {/* Cover Image */}
+                  {surprise.coverImage && (
+                    <div className="relative flex-shrink-0">
+                      <img
+                        src={surprise.coverImage}
+                        alt={surprise.title}
+                        className="w-20 h-20 object-cover rounded-lg"
+                      />
+                      {!surprise.isUnlocked && (
+                        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
+                          <Lock className="h-6 w-6 text-white" />
+                        </div>
+                      )}
+                </div>
+              )}
+              
+                  {/* Content */}
+                  <div className="flex-1">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getCategoryColor(surprise.category)}`}>
+                            {getCategoryIcon(surprise.category)}
+                            {surprise.category}
+                  </div>
+                          {surprise.isUnlocked ? (
+                            <div className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1">
+                              <Check className="h-3 w-3" />
+                              Desbloqueada
+                  </div>
+                          ) : (
+                            <div className="bg-gray-100 text-gray-800 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1">
+                              <Lock className="h-3 w-3" />
+                              Bloqueada
+                    </div>
+                  )}
+                  </div>
+                        
+                        <h3 className="font-semibold text-gray-900 mb-1">{surprise.title}</h3>
+                        <p className="text-sm text-gray-600 mb-2">{surprise.description}</p>
+
+                        {/* Unlock Info */}
+                        {!surprise.isUnlocked && (
+                          <div className="space-y-1">
+                            {surprise.unlockType === 'date' && surprise.unlockDate && (
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <Clock className="h-4 w-4" />
+                                <span>{getTimeUntilUnlock(surprise)}</span>
+                </div>
+              )}
+                            
+                            {surprise.unlockType === 'sequential' && (
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <ChevronRight className="h-4 w-4" />
+                                <span>Secuencial</span>
             </div>
+                            )}
+                            
+                            {surprise.unlockType === 'key' && (
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <Key className="h-4 w-4" />
+                                <span>Requiere llave</span>
+          </div>
+                            )}
+
+                            {surprise.previewMessage && (
+                              <p className="text-xs text-gray-500 italic">{surprise.previewMessage}</p>
+                            )}
+        </div>
+      )}
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-2">
+              <Button
+                          onClick={() => setSelectedSurprise(surprise)}
+                          variant="outline"
+                size="sm"
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          Ver
+                        </Button>
+                        
+                        {!surprise.isUnlocked && (
+                          <Button
+                onClick={() => {
+                              setSelectedSurprise(surprise)
+                              setShowUnlockModal(true)
+                }}
+                            size="sm"
+                            className="bg-pink-500 hover:bg-pink-600"
+              >
+                            <Unlock className="h-4 w-4 mr-1" />
+                            Desbloquear
+              </Button>
+                        )}
+            </div>
+                </div>
+                </div>
+                </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}
 
-      {/* Modal de Desbloqueo */}
-      {showUnlockModal && selectedSurprise && (
-        <div className="fixed inset-0 modal-overlay flex items-center justify-center z-50">
-          <div className="unlock-modal rounded-lg p-6 w-full max-w-md mx-4 shadow-2xl">
-            <div className="text-center space-y-4">
-              <div className="flex justify-center">
-                <div className="p-3 bg-pink-100 rounded-full">
-                  <Key className="h-8 w-8 text-pink-600" />
+      {/* Empty State */}
+      {filteredSurprises.length === 0 && (
+        <div className="text-center py-12">
+          <Gift className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No hay sorpresas</h3>
+          <p className="text-gray-600 mb-4">
+            {searchQuery || filterCategory !== 'all' 
+              ? 'No se encontraron sorpresas con los filtros aplicados'
+              : 'Aún no se han creado sorpresas'
+            }
+          </p>
+          <Button
+            onClick={() => setShowAddModal(true)}
+            className="bg-pink-500 hover:bg-pink-600"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Crear Primera Sorpresa
+          </Button>
+                </div>
+      )}
+
+      {/* Surprise Detail Modal */}
+      {selectedSurprise && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-bold text-gray-900">{selectedSurprise.title}</h2>
+                <Button
+                  onClick={() => setSelectedSurprise(null)}
+                  variant="ghost"
+                  size="sm"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+                </div>
+                
+              {selectedSurprise.isUnlocked ? (
+                <div className="space-y-4">
+                  {renderSurpriseContent(selectedSurprise)}
+                  
+                  {selectedSurprise.effects && (
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <h4 className="font-medium text-gray-900 mb-2">Efectos Especiales</h4>
+                      <div className="flex gap-2">
+                        {selectedSurprise.effects.confetti && (
+                          <span className="bg-pink-100 text-pink-800 px-2 py-1 rounded text-xs">
+                            🎉 Confeti
+                          </span>
+                        )}
+                        {selectedSurprise.effects.sound && (
+                          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
+                            🔊 Sonido
+                          </span>
+                        )}
+                        {selectedSurprise.effects.animation && (
+                          <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs">
+                            ✨ Animación
+                          </span>
+                        )}
+                    </div>
+                    </div>
+                  )}
+                  </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Lock className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Sorpresa Bloqueada</h3>
+                  <p className="text-gray-600 mb-4">{selectedSurprise.description}</p>
+                  
+                  <div className="space-y-2">
+                    {selectedSurprise.unlockType === 'date' && selectedSurprise.unlockDate && (
+                      <p className="text-sm text-gray-600">
+                        Disponible el {new Date(selectedSurprise.unlockDate).toLocaleDateString()}
+                      </p>
+                    )}
+                    
+                    {selectedSurprise.unlockType === 'sequential' && (
+                      <p className="text-sm text-gray-600">
+                        Desbloquea la sorpresa anterior primero
+                      </p>
+                    )}
+                    
+                    {selectedSurprise.unlockType === 'key' && (
+                      <p className="text-sm text-gray-600">
+                        Ingresa la llave correcta para desbloquear
+                      </p>
+                    )}
+
+                    {selectedSurprise.previewMessage && (
+                      <p className="text-sm text-gray-500 italic">{selectedSurprise.previewMessage}</p>
+                    )}
                 </div>
               </div>
-              <h3 className="text-xl font-semibold text-gray-800">Desbloquear Sorpresa</h3>
-              <p className="text-gray-600">{selectedSurprise.title}</p>
-              
-              {selectedSurprise.unlockType === 'key' && (
-                <div className="space-y-3">
-                  <p className="text-sm text-gray-500">Ingresa la llave especial:</p>
-                  <Input
-                    type="password"
-                    value={unlockKey}
-                    onChange={(e) => setUnlockKey(e.target.value)}
-                    placeholder="Ingresa la llave..."
-                    className="text-center text-lg font-mono"
-                  />
-                </div>
               )}
-              
-              <div className="flex gap-3">
+                </div>
+                </div>
+                  </div>
+                )}
+
+      {/* Unlock Modal */}
+      {showUnlockModal && selectedSurprise && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-900">Desbloquear Sorpresa</h2>
                 <Button
                   onClick={() => {
                     setShowUnlockModal(false)
                     setUnlockKey('')
-                    setSelectedSurprise(null)
                   }}
-                  variant="outline"
-                  className="flex-1"
+                  variant="ghost"
+                  size="sm"
                 >
-                  Cancelar
+                  <X className="h-5 w-5" />
                 </Button>
-                <Button
-                  onClick={() => unlockSurprise(selectedSurprise)}
-                  className="flex-1 bg-pink-500 hover:bg-pink-600"
-                >
-                  <Unlock className="h-4 w-4 mr-2" />
-                  Desbloquear
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+                  </div>
 
-      {/* Modal de Logros */}
-      {showAchievementsModal && (
-        <div className="fixed inset-0 modal-overlay flex items-center justify-center z-50">
-          <div className="modal-content bg-white rounded-lg p-6 w-full max-w-2xl mx-4 shadow-2xl">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-semibold text-gray-800 flex items-center gap-2">
-                <Trophy className="h-6 w-6 text-yellow-500" />
-                Logros Desbloqueados
-              </h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowAchievementsModal(false)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {achievements.map((achievement) => {
-                const isUnlocked = unlockedAchievements.some(a => a.id === achievement.id)
-                return (
-                  <div
-                    key={achievement.id}
-                    className={`p-4 rounded-lg border-2 transition-all duration-200 ${
-                      isUnlocked
-                        ? 'border-yellow-300 bg-yellow-50'
-                        : 'border-gray-200 bg-gray-50 opacity-50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="text-2xl">{achievement.icon}</div>
-                      <div className="flex-1">
-                        <h4 className="font-semibold text-gray-800">{achievement.title}</h4>
-                        <p className="text-sm text-gray-600">{achievement.description}</p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Requiere {achievement.requirement} sorpresa{achievement.requirement > 1 ? 's' : ''}
-                        </p>
-                      </div>
-                      {isUnlocked && (
-                        <Check className="h-5 w-5 text-green-500" />
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Contenido */}
-      {showContentModal && selectedSurprise && (
-        <div className="fixed inset-0 modal-overlay flex items-center justify-center z-50">
-          <div className="modal-content bg-white rounded-lg p-6 w-full max-w-4xl mx-4 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-semibold text-gray-800 flex items-center gap-2">
-                <Gift className="h-6 w-6 text-pink-500" />
-                {selectedSurprise.content.title}
-              </h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setShowContentModal(false)
-                  setSelectedSurprise(null)
-                }}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
-            
-            <div className="space-y-6">
-              <div className="text-center">
-                <p className="text-gray-600 text-lg">{selectedSurprise.content.description}</p>
-              </div>
-              
-              {/* Contenido según el tipo */}
-              {selectedSurprise.content.type === 'text' && (
-                <div className="surprise-content">
-                  <p className="text-gray-800 whitespace-pre-line leading-relaxed">
-                    {selectedSurprise.content.content}
-                  </p>
-                </div>
-              )}
-              
-              {selectedSurprise.content.type === 'image' && (
-                <div className="text-center">
-                  <div className="bg-gray-200 rounded-lg p-8">
-                    <Image className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600">Imagen: {selectedSurprise.content.content}</p>
-                  </div>
-                </div>
-              )}
-              
-              {selectedSurprise.content.type === 'video' && (
-                <div className="text-center">
-                  <div className="bg-gray-200 rounded-lg p-8">
-                    <Video className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600">Video: {selectedSurprise.content.content}</p>
-                  </div>
-                </div>
-              )}
-              
-              {selectedSurprise.content.type === 'mixed' && (
-                <div className="space-y-4">
-                  {selectedSurprise.content.blocks?.map((block, index) => (
-                    <div key={index} className="surprise-content">
-                      {block.type === 'text' && (
-                        <p className="text-gray-800 whitespace-pre-line leading-relaxed">
-                          {block.content}
-                        </p>
-                      )}
-                      {block.type === 'image' && (
-                        <div className="text-center">
-                          <div className="bg-gray-200 rounded-lg p-8">
-                            <Image className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                            <p className="text-gray-600">Imagen: {block.content}</p>
-                          </div>
-                        </div>
-                      )}
-                      {block.type === 'video' && (
-                        <div className="text-center">
-                          <div className="bg-gray-200 rounded-lg p-8">
-                            <Video className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                            <p className="text-gray-600">Video: {block.content}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-              
-              {(selectedSurprise.content.type === 'invitation' || selectedSurprise.content.type === 'event') && (
-                <div className="surprise-content space-y-4">
-                  <div className="flex items-center gap-3">
-                    <Calendar className="h-5 w-5 text-blue-600" />
-                    <span className="font-medium text-blue-800">
-                      {selectedSurprise.content.eventDate}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <MapPin className="h-5 w-5 text-blue-600" />
-                    <span className="font-medium text-blue-800">
-                      {selectedSurprise.content.eventLocation}
-                    </span>
-                  </div>
-                  {selectedSurprise.content.eventMapLink && (
-                    <div className="flex items-center gap-3">
-                      <ExternalLink className="h-5 w-5 text-blue-600" />
-                      <a 
-                        href={selectedSurprise.content.eventMapLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800 underline"
-                      >
-                        Ver en Google Maps
-                      </a>
-                    </div>
-                  )}
-                  <div className="bg-white p-4 rounded border">
-                    <p className="text-gray-800">{selectedSurprise.content.content}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal para Crear Sorpresa */}
-      {showCreateModal && (
-        <div className="fixed inset-0 modal-overlay flex items-center justify-center z-50">
-          <div className="modal-content bg-white rounded-lg p-6 w-full max-w-6xl mx-4 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-semibold text-gray-800 flex items-center gap-2">
-                <Plus className="h-6 w-6 text-pink-500" />
-                Crear Nueva Sorpresa
-              </h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setShowCreateModal(false)
-                  resetForm()
-                }}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Información básica */}
-              <div className="space-y-6">
-                <h4 className="text-lg font-semibold text-gray-800 border-b pb-2">Información Básica</h4>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Título de la Sorpresa *
-                  </label>
-                  <Input
-                    value={newSurprise.title}
-                    onChange={(e) => setNewSurprise(prev => ({ ...prev, title: e.target.value }))}
-                    placeholder="Ej: Mensaje Secreto"
-                    className="border-gray-300 focus:border-pink-500 focus:ring-pink-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Descripción
-                  </label>
-                  <Input
-                    value={newSurprise.description}
-                    onChange={(e) => setNewSurprise(prev => ({ ...prev, description: e.target.value }))}
-                    placeholder="Describe brevemente la sorpresa"
-                    className="border-gray-300 focus:border-pink-500 focus:ring-pink-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Categoría
-                  </label>
-                  <select
-                    value={newSurprise.category}
-                    onChange={(e) => setNewSurprise(prev => ({ ...prev, category: e.target.value as any }))}
-                    className="w-full p-2 border border-gray-300 rounded-md focus:border-pink-500 focus:ring-pink-500"
-                  >
-                    <option value="texto">Texto</option>
-                    <option value="foto">Foto</option>
-                    <option value="invitacion">Invitación</option>
-                    <option value="evento">Evento</option>
-                    <option value="mixto">Mixto</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Imagen de Portada (Opcional)
-                  </label>
-                  <ImageUpload
-                    currentImage={newSurprise.coverImage}
-                    onFileSelect={(file, dataUrl) => setNewSurprise(prev => ({ ...prev, coverImage: dataUrl }))}
-                    onRemove={() => setNewSurprise(prev => ({ ...prev, coverImage: '' }))}
-                    maxSize={2}
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Tipo de Desbloqueo
-                  </label>
-                  <select
-                    value={newSurprise.unlockType}
-                    onChange={(e) => setNewSurprise(prev => ({ ...prev, unlockType: e.target.value as any }))}
-                    className="w-full p-2 border border-gray-300 rounded-md focus:border-pink-500 focus:ring-pink-500"
-                  >
-                    <option value="free">Libre (inmediato)</option>
-                    <option value="date">Por fecha</option>
-                    <option value="key">Por llave</option>
-                    <option value="sequential">Secuencial</option>
-                  </select>
-                </div>
-                
-                {(newSurprise.unlockType as string) === 'date' && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Fecha de Desbloqueo
-                      </label>
-                      <Input
-                        type="date"
-                        value={newSurprise.unlockDate}
-                        onChange={(e) => setNewSurprise(prev => ({ ...prev, unlockDate: e.target.value }))}
-                        className="border-gray-300 focus:border-pink-500 focus:ring-pink-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Hora de Desbloqueo
-                      </label>
-                      <Input
-                        type="time"
-                        value={newSurprise.unlockTime}
-                        onChange={(e) => setNewSurprise(prev => ({ ...prev, unlockTime: e.target.value }))}
-                        className="border-gray-300 focus:border-pink-500 focus:ring-pink-500"
-                      />
-                    </div>
-                  </div>
-                )}
-                
-                {(newSurprise.unlockType as string) === 'key' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Llave de Desbloqueo
-                    </label>
-                    <Input
-                      value={newSurprise.requiredKey}
-                      onChange={(e) => setNewSurprise(prev => ({ ...prev, requiredKey: e.target.value }))}
-                      placeholder="Ej: AMOR2024"
-                      className="border-gray-300 focus:border-pink-500 focus:ring-pink-500"
-                    />
-                  </div>
-                )}
-                
-                {(newSurprise.unlockType as string) === 'sequential' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Depende de la Sorpresa
-                    </label>
-                    <select
-                      value={newSurprise.dependsOn}
-                      onChange={(e) => setNewSurprise(prev => ({ ...prev, dependsOn: e.target.value }))}
-                      className="w-full p-2 border border-gray-300 rounded-md focus:border-pink-500 focus:ring-pink-500"
-                    >
-                      <option value="">Selecciona una sorpresa</option>
-                      {surprises.map(surprise => (
-                        <option key={surprise.id} value={surprise.id}>
-                          {surprise.title}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Mensaje Previo (Opcional)
-                  </label>
-                  <Input
-                    value={newSurprise.previewMessage}
-                    onChange={(e) => setNewSurprise(prev => ({ ...prev, previewMessage: e.target.value }))}
-                    placeholder="Ej: ¡Faltan solo 30 días para descubrir esta sorpresa!"
-                    className="border-gray-300 focus:border-pink-500 focus:ring-pink-500"
-                  />
-                </div>
-              </div>
-              
-              {/* Contenido de la sorpresa */}
-              <div className="space-y-6">
-                <h4 className="text-lg font-semibold text-gray-800 border-b pb-2">Contenido de la Sorpresa</h4>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Tipo de Contenido
-                  </label>
-                  <select
-                    value={newSurprise.contentType}
-                    onChange={(e) => setNewSurprise(prev => ({ ...prev, contentType: e.target.value as any }))}
-                    className="w-full p-2 border border-gray-300 rounded-md focus:border-pink-500 focus:ring-pink-500"
-                  >
-                    <option value="text">Texto/Mensaje</option>
-                    <option value="image">Imagen</option>
-                    <option value="video">Video</option>
-                    <option value="invitation">Invitación</option>
-                    <option value="event">Evento</option>
-                    <option value="mixed">Mixto</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Título del Contenido *
-                  </label>
-                  <Input
-                    value={newSurprise.contentTitle}
-                    onChange={(e) => setNewSurprise(prev => ({ ...prev, contentTitle: e.target.value }))}
-                    placeholder="Título que aparecerá al abrir la sorpresa"
-                    className="border-gray-300 focus:border-pink-500 focus:ring-pink-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Descripción del Contenido
-                  </label>
-                  <Input
-                    value={newSurprise.contentDescription}
-                    onChange={(e) => setNewSurprise(prev => ({ ...prev, contentDescription: e.target.value }))}
-                    placeholder="Descripción breve del contenido"
-                    className="border-gray-300 focus:border-pink-500 focus:ring-pink-500"
-                  />
-                </div>
-
-                {/* Contenido específico según tipo */}
-                {newSurprise.contentType === 'text' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Mensaje
-                    </label>
-                    <textarea
-                      value={newSurprise.contentText}
-                      onChange={(e) => setNewSurprise(prev => ({ ...prev, contentText: e.target.value }))}
-                      placeholder="Escribe tu mensaje especial..."
-                      rows={6}
-                      className="w-full p-3 border border-gray-300 rounded-md resize-none focus:border-pink-500 focus:ring-pink-500"
-                    />
-                  </div>
-                )}
-
-                {(newSurprise.contentType as string) === 'image' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Subir Imagen
-                    </label>
-                    <ImageUpload
-                      currentImage={newSurprise.contentText}
-                      onFileSelect={(file, dataUrl) => setNewSurprise(prev => ({ ...prev, contentText: dataUrl }))}
-                      onRemove={() => setNewSurprise(prev => ({ ...prev, contentText: '' }))}
-                      maxSize={5}
-                    />
-                  </div>
-                )}
-
-                {(newSurprise.contentType as string) === 'video' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      URL del Video
-                    </label>
-                    <Input
-                      value={newSurprise.contentText}
-                      onChange={(e) => setNewSurprise(prev => ({ ...prev, contentText: e.target.value }))}
-                      placeholder="https://example.com/video.mp4"
-                      className="border-gray-300 focus:border-pink-500 focus:ring-pink-500"
-                    />
-                  </div>
-                )}
-
-                {((newSurprise.contentType as string) === 'invitation' || (newSurprise.contentType as string) === 'event') && (
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Fecha del Evento
-                      </label>
-                      <Input
-                        type="date"
-                        value={newSurprise.eventDate}
-                        onChange={(e) => setNewSurprise(prev => ({ ...prev, eventDate: e.target.value }))}
-                        className="border-gray-300 focus:border-pink-500 focus:ring-pink-500"
-                      />
+                  <h3 className="font-medium text-gray-900 mb-2">{selectedSurprise.title}</h3>
+                  <p className="text-sm text-gray-600">{selectedSurprise.description}</p>
                     </div>
                     
+                {selectedSurprise.unlockType === 'key' && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Ubicación del Evento
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Ingresa la llave
                       </label>
                       <Input
-                        value={newSurprise.eventLocation}
-                        onChange={(e) => setNewSurprise(prev => ({ ...prev, eventLocation: e.target.value }))}
-                        placeholder="Lugar del evento"
-                        className="border-gray-300 focus:border-pink-500 focus:ring-pink-500"
+                      type="password"
+                      value={unlockKey}
+                      onChange={(e) => setUnlockKey(e.target.value)}
+                      placeholder="Escribe la llave..."
+                      className="w-full"
                       />
                     </div>
+                )}
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Link de Google Maps (Opcional)
-                      </label>
-                      <Input
-                        value={newSurprise.eventMapLink}
-                        onChange={(e) => setNewSurprise(prev => ({ ...prev, eventMapLink: e.target.value }))}
-                        placeholder="https://maps.google.com/?q=..."
-                        className="border-gray-300 focus:border-pink-500 focus:ring-pink-500"
-                      />
+                {selectedSurprise.unlockType === 'date' && (
+                  <div className="text-center">
+                    <Clock className="h-12 w-12 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm text-gray-600">
+                      Esta sorpresa se desbloqueará automáticamente en la fecha programada
+                    </p>
                     </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Detalles del Evento
-                      </label>
-                      <textarea
-                        value={newSurprise.contentText}
-                        onChange={(e) => setNewSurprise(prev => ({ ...prev, contentText: e.target.value }))}
-                        placeholder="Describe los detalles del evento..."
-                        rows={4}
-                        className="w-full p-3 border border-gray-300 rounded-md resize-none focus:border-pink-500 focus:ring-pink-500"
-                      />
-                    </div>
+                )}
+
+                {selectedSurprise.unlockType === 'sequential' && (
+                  <div className="text-center">
+                    <ChevronRight className="h-12 w-12 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm text-gray-600">
+                      Desbloquea la sorpresa anterior para acceder a esta
+                    </p>
                   </div>
                 )}
 
-                {/* Efectos */}
-                <div className="space-y-4">
-                  <h5 className="text-md font-semibold text-gray-800">Efectos Visuales</h5>
-                  
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      id="confetti"
-                      checked={newSurprise.effects.confetti}
-                      onChange={(e) => setNewSurprise(prev => ({
-                        ...prev,
-                        effects: { ...prev.effects, confetti: e.target.checked }
-                      }))}
-                      className="rounded border-gray-300 text-pink-500 focus:ring-pink-500"
-                    />
-                    <label htmlFor="confetti" className="text-sm text-gray-700">
-                      Mostrar confeti al abrir
-                    </label>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Efecto de Sonido (Opcional)
-                    </label>
-                    <select
-                      value={newSurprise.effects.sound}
-                      onChange={(e) => setNewSurprise(prev => ({
-                        ...prev,
-                        effects: { ...prev.effects, sound: e.target.value }
-                      }))}
-                      className="w-full p-2 border border-gray-300 rounded-md focus:border-pink-500 focus:ring-pink-500"
-                    >
-                      <option value="">Sin sonido</option>
-                      <option value="magic-chime.mp3">Campanilla mágica</option>
-                      <option value="romantic-chime.mp3">Campanilla romántica</option>
-                      <option value="gift-open.mp3">Abrir regalo</option>
-                      <option value="music-note.mp3">Nota musical</option>
-                      <option value="wedding-bells.mp3">Campanas de boda</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Animación
-                    </label>
-                    <select
-                      value={newSurprise.effects.animation}
-                      onChange={(e) => setNewSurprise(prev => ({
-                        ...prev,
-                        effects: { ...prev.effects, animation: e.target.value }
-                      }))}
-                      className="w-full p-2 border border-gray-300 rounded-md focus:border-pink-500 focus:ring-pink-500"
-                    >
-                      <option value="fade-in">Aparecer suavemente</option>
-                      <option value="slide-up">Deslizar hacia arriba</option>
-                      <option value="zoom-in">Acercar</option>
-                      <option value="explosion">Explosión</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <div className="flex gap-3 mt-8">
+                <div className="flex gap-2">
               <Button
                 onClick={() => {
-                  setShowCreateModal(false)
-                  resetForm()
+                      setShowUnlockModal(false)
+                      setUnlockKey('')
                 }}
                 variant="outline"
-                className="flex-1 border-gray-300 hover:bg-gray-50"
+                    className="flex-1"
               >
                 Cancelar
               </Button>
+                  
               <Button
-                onClick={createSurprise}
-                disabled={!newSurprise.title || !newSurprise.contentTitle}
-                className="flex-1 bg-pink-500 hover:bg-pink-600 shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={handleUnlockAttempt}
+                    className="flex-1 bg-pink-500 hover:bg-pink-600"
               >
-                <Plus className="h-4 w-4 mr-2" />
-                Crear Sorpresa
+                    <Unlock className="h-4 w-4 mr-2" />
+                    Desbloquear
               </Button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

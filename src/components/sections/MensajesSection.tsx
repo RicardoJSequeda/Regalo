@@ -13,13 +13,12 @@ import {
   Briefcase, 
   Hash, 
   Sparkles,
-  MessageCircle,
   Calendar,
-  User,
   Edit,
   Trash2
 } from 'lucide-react'
-import { useLocalStorage } from '@/hooks/useLocalStorage'
+import { getBrowserClient } from '@/lib/supabase/browser-client'
+import { uploadPublicFile } from '@/lib/supabase/storage'
 
 interface Message {
   id: string
@@ -29,6 +28,7 @@ interface Message {
   category: string
   isRead: boolean
   isFavorite: boolean
+  images?: string[]
 }
 
 const categories = [
@@ -39,124 +39,65 @@ const categories = [
   { name: 'Especiales', icon: Sparkles, color: 'bg-purple-100 text-purple-800 border-purple-200' },
 ]
 
-const initialMessages: Message[] = [
-  {
-    id: '1',
-    title: 'Para mi amor eterno',
-    content: 'Mi querido amor, Cada día que pasa a tu lado es un regalo que atesoro con todo mi corazón. Desde el momento en que nuestros ojos se encontraron, supe que mi vida cambiaría para siempre. Tu sonrisa ilumina mis días más oscuros y tu amor me da la fuerza para enfrentar cualquier desafío. Eres mi compañero perfecto, mi mejor amigo y el amor de mi vida. Te amo más de lo que las palabras pueden expresar.',
-    date: '2024-01-15',
-    category: 'Amor',
-    isRead: true,
-    isFavorite: true
-  },
-  {
-    id: '2',
-    title: 'Nuestros sueños por cumplir',
-    content: 'Mi amor, tengo tantos sueños que quiero cumplir contigo... Quiero viajar por el mundo tomados de la mano, descubrir nuevos lugares juntos, crear recuerdos inolvidables en cada rincón del planeta. Quiero construir una familia contigo, ver crecer a nuestros hijos y envejecer juntos. Quiero despertar cada mañana viendo tu rostro y dormir cada noche sintiendo tu amor. Juntos podemos lograr todo lo que nos propongamos.',
-    date: '2024-03-10',
-    category: 'Futuro',
-    isRead: true,
-    isFavorite: false
-  },
-  {
-    id: '3',
-    title: 'Recordando nuestro primer beso',
-    content: '¿Recuerdas ese momento mágico bajo las estrellas? Era una noche perfecta, la brisa suave acariciaba nuestros rostros mientras contemplábamos el cielo estrellado. El momento era tan perfecto que parecía que el tiempo se había detenido. Cuando nuestros labios se encontraron por primera vez, sentí que el universo entero se alineaba. Fue el beso más dulce y perfecto que he experimentado. Ese momento quedó grabado en mi corazón para siempre.',
-    date: '2024-02-14',
-    category: 'Recuerdos',
-    isRead: false,
-    isFavorite: false
-  },
-  {
-    id: '4',
-    title: 'Gracias por ser mi motivación',
-    content: 'Querido amor, quiero que sepas que eres mi mayor motivación en la vida. Cada vez que me siento desanimado o que las cosas no salen como esperaba, solo necesito pensar en ti y en tu amor para encontrar la fuerza que necesito. Tu confianza en mí me hace creer que puedo lograr cualquier cosa. Gracias por ser mi roca, mi apoyo incondicional y por nunca dudar de mí. Contigo a mi lado, me siento invencible.',
-    date: '2024-02-20',
-    category: 'Motivación',
-    isRead: true,
-    isFavorite: true
-  },
-  {
-    id: '5',
-    title: 'Nuestra primera cita',
-    content: 'Ese día que nos conocimos en el café del centro, mi corazón latía tan fuerte que pensé que todos podrían escucharlo. Estabas tan hermosa con ese vestido azul y esa sonrisa tímida. Recuerdo cada detalle: el aroma del café, la música suave de fondo, la forma en que tus ojos brillaban cuando hablabas de tus sueños. Fue el comienzo de nuestra hermosa historia de amor, y cada día desde entonces ha sido mejor que el anterior.',
-    date: '2024-01-25',
-    category: 'Recuerdos',
-    isRead: true,
-    isFavorite: true
-  },
-  {
-    id: '6',
-    title: 'Mi promesa para el futuro',
-    content: 'Mi amor, quiero hacerte una promesa: prometo amarte cada día más que el anterior, prometo ser tu compañero fiel en las buenas y en las malas, prometo escucharte cuando necesites hablar, abrazarte cuando necesites consuelo, y celebrar contigo cada logro. Prometo construir un futuro lleno de amor, risas y momentos inolvidables. Prometo ser la persona que mereces y hacerte feliz todos los días de mi vida.',
-    date: '2024-03-05',
-    category: 'Futuro',
-    isRead: false,
-    isFavorite: false
-  },
-  {
-    id: '7',
-    title: 'Eres mi inspiración diaria',
-    content: 'Cada mañana cuando me despierto y veo tu rostro, siento que puedo conquistar el mundo. Tu determinación, tu bondad y tu fuerza me inspiran a ser una mejor persona. La forma en que enfrentas los desafíos con valentía, cómo cuidas de los demás con tanto amor, y cómo persigues tus sueños sin miedo, me hace querer ser mejor cada día. Eres mi ejemplo a seguir y mi mayor inspiración.',
-    date: '2024-02-28',
-    category: 'Motivación',
-    isRead: true,
-    isFavorite: false
-  },
-  {
-    id: '8',
-    title: 'Nuestro viaje juntos',
-    content: 'Mi amor, nuestro viaje juntos ha sido la aventura más hermosa de mi vida. Hemos reído, llorado, soñado y crecido juntos. Cada paso que hemos dado, cada decisión que hemos tomado, nos ha llevado a donde estamos hoy. Y aunque el camino no siempre ha sido fácil, lo hemos recorrido juntos, tomados de la mano. Estoy emocionado por todos los caminos que aún tenemos por explorar juntos.',
-    date: '2024-03-15',
-    category: 'Especiales',
-    isRead: false,
-    isFavorite: true
-  },
-  {
-    id: '9',
-    title: 'Mi agradecimiento infinito',
-    content: 'Quiero agradecerte por cada momento que has compartido conmigo, por cada sonrisa que me has regalado, por cada abrazo que me has dado cuando más lo necesitaba. Gracias por ser mi confidente, mi mejor amigo y mi amor verdadero. Gracias por aceptarme tal como soy, con mis virtudes y mis defectos. Gracias por hacer que cada día sea especial solo con tu presencia. Te amo más de lo que las palabras pueden expresar.',
-    date: '2024-02-10',
-    category: 'Amor',
-    isRead: true,
-    isFavorite: false
-  },
-  {
-    id: '10',
-    title: 'Nuestro amor es mágico',
-    content: 'Hay algo mágico en nuestro amor que no puedo explicar con palabras. Es como si el universo hubiera conspirado para que nos encontráramos. Cada vez que te miro, siento mariposas en el estómago como si fuera la primera vez. Tu amor me hace sentir que todo es posible, que los sueños se pueden hacer realidad. Eres mi felicidad, mi paz y mi hogar. Contigo, he encontrado el amor verdadero que siempre soñé.',
-    date: '2024-03-20',
-    category: 'Especiales',
-    isRead: false,
-    isFavorite: true
-  }
-]
-
 export function MensajesSection() {
-  const { value: messages, setValue: setMessages } = useLocalStorage<Message[]>('messages', initialMessages)
-  
-  // Initialize messages if localStorage is empty
-  useEffect(() => {
-    const savedMessages = localStorage.getItem('messages')
-    if (!savedMessages || JSON.parse(savedMessages).length === 0) {
-      console.log('Cargando mensajes de ejemplo...')
-      setMessages(initialMessages)
-    } else {
-      console.log('Mensajes encontrados en localStorage:', JSON.parse(savedMessages).length)
-    }
-  }, [setMessages])
+  const supabase = getBrowserClient()
+  const [messages, setMessages] = useState<Message[]>([])
 
-  // Debug: verificar que los mensajes se están cargando
+  // cargar mensajes
   useEffect(() => {
-    console.log('Mensajes cargados:', messages.length)
-    console.log('Mensajes:', messages)
-  }, [messages])
+    const load = async () => {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('id,title,content,date,category,is_read,is_favorite,images')
+        .order('date', { ascending: false })
+      if (!error && data) {
+        setMessages(
+          data.map((m: any) => ({
+            id: m.id,
+            title: m.title,
+            content: m.content,
+            date: m.date,
+            category: m.category,
+            isRead: !!m.is_read,
+            isFavorite: !!m.is_favorite,
+            images: m.images || []
+          }))
+        )
+      }
+    }
+    load()
+
+    // realtime
+    const channel = supabase
+      .channel('messages-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => load())
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [supabase])
+
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('')
   const [isWriteModalOpen, setIsWriteModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [editingMessage, setEditingMessage] = useState<Message | null>(null)
   const [newMessage, setNewMessage] = useState({ title: '', content: '', category: 'Amor' })
+  const [newImages, setNewImages] = useState<File[]>([])
+  const [saving, setSaving] = useState(false)
+
+  // Función para manejar drag & drop
+  const handleDrop = (e: React.DragEvent, setImages: (files: File[]) => void) => {
+    e.preventDefault()
+    const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'))
+    if (files.length > 0) {
+      setImages(files)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+  }
 
   // Estadísticas
   const totalMessages = messages.length
@@ -172,78 +113,112 @@ export function MensajesSection() {
     return matchesSearch && matchesCategory
   })
 
-
-
   // Toggle favorito
-  const toggleFavorite = (messageId: string) => {
-    setMessages(prev => prev.map(m => 
-      m.id === messageId ? { ...m, isFavorite: !m.isFavorite } : m
-    ))
+  const toggleFavorite = async (messageId: string) => {
+    const current = messages.find(m => m.id === messageId)
+    if (!current) return
+    setMessages(prev => prev.map(m => m.id === messageId ? { ...m, isFavorite: !m.isFavorite } : m))
+    await supabase.from('messages').update({ is_favorite: !current.isFavorite }).eq('id', messageId)
   }
 
   // Marcar como leído
-  const markAsRead = (messageId: string) => {
-    setMessages(prev => prev.map(m => 
-      m.id === messageId ? { ...m, isRead: true } : m
-    ))
+  const markAsRead = async (messageId: string) => {
+    const current = messages.find(m => m.id === messageId)
+    if (!current || current.isRead) return
+    setMessages(prev => prev.map(m => m.id === messageId ? { ...m, isRead: true } : m))
+    await supabase.from('messages').update({ is_read: true }).eq('id', messageId)
   }
 
-
-
   // Eliminar mensaje
-  const deleteMessage = (messageId: string) => {
-    if (confirm('¿Estás seguro de que quieres eliminar este mensaje?')) {
-      setMessages(prev => prev.filter(m => m.id !== messageId))
-    }
+  const deleteMessage = async (messageId: string) => {
+    if (!confirm('¿Estás seguro de que quieres eliminar este mensaje?')) return
+    setMessages(prev => prev.filter(m => m.id !== messageId))
+    await supabase.from('messages').delete().eq('id', messageId)
   }
 
   // Abrir modal de edición
   const openEditModal = (message: Message) => {
     setEditingMessage(message)
-    setNewMessage({
-      title: message.title,
-      content: message.content,
-      category: message.category
-    })
+    setNewMessage({ title: message.title, content: message.content, category: message.category })
+    setNewImages([])
     setIsEditModalOpen(true)
   }
 
   // Guardar mensaje editado
-  const saveEditedMessage = () => {
+  const saveEditedMessage = async () => {
     if (!editingMessage || !newMessage.title || !newMessage.content) return
-
-    const updatedMessage: Message = {
-      ...editingMessage,
-      title: newMessage.title,
-      content: newMessage.content,
-      category: newMessage.category,
-      date: new Date().toISOString().split('T')[0] // Actualizar fecha
+    try {
+      setSaving(true)
+      let uploadedUrls: string[] = []
+      if (newImages.length > 0) {
+        const uploads = await Promise.all(
+          newImages.map((file, idx) => uploadPublicFile('message-images', file, `messages/${editingMessage!.id}-${Date.now()}-${idx}/`))
+        )
+        uploadedUrls = uploads.map(u => u.url)
+      }
+      const updated = {
+        title: newMessage.title,
+        content: newMessage.content,
+        category: newMessage.category,
+        date: new Date().toISOString().slice(0, 10),
+        images: uploadedUrls.length > 0 ? uploadedUrls : editingMessage.images || []
+      }
+      setMessages(prev => prev.map(m => m.id === editingMessage.id ? { ...m, ...updated } as Message : m))
+      await supabase.from('messages').update({
+        title: updated.title,
+        content: updated.content,
+        category: updated.category,
+        date: updated.date,
+        images: updated.images
+      }).eq('id', editingMessage.id)
+      setIsEditModalOpen(false)
+      setEditingMessage(null)
+      setNewMessage({ title: '', content: '', category: 'Amor' })
+      setNewImages([])
+    } finally {
+      setSaving(false)
     }
-
-    setMessages(prev => prev.map(m => 
-      m.id === editingMessage.id ? updatedMessage : m
-    ))
-    
-    setIsEditModalOpen(false)
-    setEditingMessage(null)
-    setNewMessage({ title: '', content: '', category: 'Amor' })
   }
 
   // Agregar nuevo mensaje
-  const addNewMessage = () => {
-    if (newMessage.title && newMessage.content) {
-      const message: Message = {
-        id: Date.now().toString(),
+  const addNewMessage = async () => {
+    if (!newMessage.title || !newMessage.content) return
+    try {
+      setSaving(true)
+      let images: string[] = []
+      if (newImages.length > 0) {
+        const uploads = await Promise.all(
+          newImages.map((file, idx) => uploadPublicFile('message-images', file, `messages/new-${Date.now()}-${idx}/`))
+        )
+        images = uploads.map(u => u.url)
+      }
+      const payload = {
         title: newMessage.title,
         content: newMessage.content,
-        date: new Date().toISOString().split('T')[0],
+        date: new Date().toISOString().slice(0, 10),
         category: newMessage.category,
-        isRead: false,
-        isFavorite: false
+        is_read: false,
+        is_favorite: false,
+        images
       }
-      setMessages(prev => [message, ...prev])
+      const { data, error } = await supabase.from('messages').insert(payload).select('id').single()
+      if (!error && data) {
+        setMessages(prev => [{
+          id: data.id,
+          title: payload.title,
+          content: payload.content,
+          date: payload.date,
+          category: payload.category,
+          isRead: false,
+          isFavorite: false,
+          images
+        }, ...prev])
+      }
       setNewMessage({ title: '', content: '', category: 'Amor' })
+      setNewImages([])
       setIsWriteModalOpen(false)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -252,9 +227,7 @@ export function MensajesSection() {
       {/* Header */}
       <div className="text-center space-y-2">
         <h1 className="text-4xl font-bold text-gray-800">Mensajes</h1>
-        <p className="text-gray-600 text-lg">
-          Comparte tus pensamientos, deseos y sentimientos más profundos.
-        </p>
+        <p className="text-gray-600 text-lg">Comparte tus pensamientos, deseos y sentimientos más profundos.</p>
       </div>
 
       {/* Estadísticas y Acciones */}
@@ -277,12 +250,8 @@ export function MensajesSection() {
             <div className="text-sm text-gray-600">Favoritos</div>
           </div>
         </div>
-        
         <div className="flex gap-3">
-          <Button 
-            onClick={() => setIsWriteModalOpen(true)}
-            className="bg-pink-500 hover:bg-pink-600 text-white shadow-lg hover:shadow-xl transition-all duration-200"
-          >
+          <Button onClick={() => setIsWriteModalOpen(true)} className="bg-pink-500 hover:bg-pink-600 text-white shadow-lg hover:shadow-xl transition-all duration-200">
             <Edit3 className="h-4 w-4 mr-2" />
             Escribir Mensaje
           </Button>
@@ -293,31 +262,14 @@ export function MensajesSection() {
       <div className="space-y-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input
-            placeholder="Buscar en mensajes..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 border-gray-300 focus:border-pink-500 focus:ring-pink-500"
-          />
+          <Input placeholder="Buscar en mensajes..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10 border-gray-300 focus:border-pink-500 focus:ring-pink-500" />
         </div>
-        
         <div className="flex flex-wrap gap-2">
-          <Badge
-            variant={selectedCategory === '' ? 'default' : 'secondary'}
-            className="category-badge hover:bg-pink-100"
-            onClick={() => setSelectedCategory('')}
-          >
-            Todos
-          </Badge>
+          <Badge variant={selectedCategory === '' ? 'default' : 'secondary'} className="category-badge hover:bg-pink-100" onClick={() => setSelectedCategory('')}>Todos</Badge>
           {categories.map((category) => {
             const Icon = category.icon
             return (
-              <Badge
-                key={category.name}
-                variant={selectedCategory === category.name ? 'default' : 'secondary'}
-                className={`category-badge ${category.color}`}
-                onClick={() => setSelectedCategory(category.name)}
-              >
+              <Badge key={category.name} variant={selectedCategory === category.name ? 'default' : 'secondary'} className={`category-badge ${category.color}`} onClick={() => setSelectedCategory(category.name)}>
                 <Icon className="h-3 w-3 mr-1" />
                 {category.name}
               </Badge>
@@ -332,77 +284,50 @@ export function MensajesSection() {
           const category = categories.find(c => c.name === message.category)
           const Icon = category?.icon || Heart
           const rotationClass = index === 0 ? 'rotate-1' : index === 1 ? 'rotate-2' : 'rotate-3'
-          
           return (
-            <Card 
-              key={message.id}
-              className={`message-card ${rotationClass} ${
-                !message.isRead ? 'ring-2 ring-pink-200' : ''
-              }`}
-              onClick={() => markAsRead(message.id)}
-            >
+            <Card key={message.id} className={`message-card ${rotationClass} ${!message.isRead ? 'ring-2 ring-pink-200' : ''}`} onClick={() => markAsRead(message.id)}>
               <CardContent className="p-6">
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex-1">
-                    <h3 className="font-semibold text-lg text-gray-800 mb-1">
-                      {message.title}
-                    </h3>
+                    <h3 className="font-semibold text-lg text-gray-800 mb-1">{message.title}</h3>
                     <div className="flex items-center gap-2 text-sm text-gray-500">
                       <Calendar className="h-3 w-3" />
                       {message.date}
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        toggleFavorite(message.id)
-                      }}
-                      className={`p-1 h-auto transition-all duration-200 ${
-                        message.isFavorite ? 'text-red-500 hover:text-red-600' : 'text-gray-400 hover:text-red-500'
-                      }`}
-                    >
+                    <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); toggleFavorite(message.id) }} className={`p-1 h-auto transition-all duration-200 ${message.isFavorite ? 'text-red-500 hover:text-red-600' : 'text-gray-400 hover:text-red-500'}`}>
                       <Heart className={`h-4 w-4 ${message.isFavorite ? 'fill-current' : ''}`} />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        openEditModal(message)
-                      }}
-                      className="p-1 h-auto text-blue-500 hover:text-blue-600 transition-all duration-200"
-                    >
+                    <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openEditModal(message) }} className="p-1 h-auto text-blue-500 hover:text-blue-600 transition-all duration-200">
                       <Edit className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        deleteMessage(message.id)
-                      }}
-                      className="p-1 h-auto text-red-500 hover:text-red-600 transition-all duration-200"
-                    >
+                    <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); deleteMessage(message.id) }} className="p-1 h-auto text-red-500 hover:text-red-600 transition-all duration-200">
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
-                
-                <p className="text-gray-600 text-sm line-clamp-4 mb-3 leading-relaxed">
-                  {message.content}
-                </p>
-                
+                <p className="text-gray-600 text-sm line-clamp-4 mb-3 leading-relaxed">{message.content}</p>
+                {message.images && message.images.length > 0 && (
+                  <div className="mb-3">
+                    <div className="flex gap-2 overflow-x-auto">
+                      {message.images.map((imageUrl, idx) => (
+                        <img 
+                          key={idx}
+                          src={imageUrl} 
+                          alt={`Imagen ${idx + 1}`}
+                          className="w-16 h-16 object-cover rounded-lg border border-gray-200"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <Badge className={`${category?.color} transition-all duration-200 hover:scale-105`}>
                     <Icon className="h-3 w-3 mr-1" />
                     {message.category}
                   </Badge>
-                  {!message.isRead && (
-                    <div className="w-2 h-2 bg-pink-500 rounded-full animate-pulse"></div>
-                  )}
+                  {!message.isRead && (<div className="w-2 h-2 bg-pink-500 rounded-full animate-pulse"></div>)}
                 </div>
               </CardContent>
             </Card>
@@ -415,65 +340,72 @@ export function MensajesSection() {
         <div className="fixed inset-0 modal-overlay flex items-center justify-center z-50">
           <div className="modal-content bg-white rounded-lg p-6 w-full max-w-md mx-4 shadow-2xl">
             <h3 className="text-xl font-semibold mb-4 text-gray-800">Escribir Nuevo Mensaje</h3>
-            
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Título
-                </label>
-                <Input
-                  value={newMessage.title}
-                  onChange={(e) => setNewMessage(prev => ({ ...prev, title: e.target.value }))}
-                  placeholder="Título del mensaje"
-                  className="border-gray-300 focus:border-pink-500 focus:ring-pink-500"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Título</label>
+                <Input value={newMessage.title} onChange={(e) => setNewMessage(prev => ({ ...prev, title: e.target.value }))} placeholder="Título del mensaje" className="border-gray-300 focus:border-pink-500 focus:ring-pink-500" />
               </div>
-              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Categoría
-                </label>
-                <select
-                  value={newMessage.category}
-                  onChange={(e) => setNewMessage(prev => ({ ...prev, category: e.target.value }))}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:border-pink-500 focus:ring-pink-500"
-                >
-                  {categories.map(category => (
-                    <option key={category.name} value={category.name}>
-                      {category.name}
-                    </option>
-                  ))}
+                <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+                <select value={newMessage.category} onChange={(e) => setNewMessage(prev => ({ ...prev, category: e.target.value }))} className="w-full p-2 border border-gray-300 rounded-md focus:border-pink-500 focus:ring-pink-500">
+                  {categories.map(category => (<option key={category.name} value={category.name}>{category.name}</option>))}
                 </select>
               </div>
-              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Mensaje
-                </label>
-                <textarea
-                  value={newMessage.content}
-                  onChange={(e) => setNewMessage(prev => ({ ...prev, content: e.target.value }))}
-                  placeholder="Escribe tu mensaje aquí..."
-                  rows={4}
-                  className="w-full p-2 border border-gray-300 rounded-md resize-none focus:border-pink-500 focus:ring-pink-500"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Mensaje</label>
+                <textarea value={newMessage.content} onChange={(e) => setNewMessage(prev => ({ ...prev, content: e.target.value }))} placeholder="Escribe tu mensaje aquí..." rows={4} className="w-full p-2 border border-gray-300 rounded-md resize-none focus:border-pink-500 focus:ring-pink-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fotos (opcional)</label>
+                <div 
+                  className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-pink-400 transition-colors"
+                  onDrop={(e) => handleDrop(e, setNewImages)}
+                  onDragOver={handleDragOver}
+                >
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    multiple 
+                    onChange={(e) => setNewImages(Array.from(e.target.files || []))} 
+                    className="hidden"
+                    id="file-upload-new"
+                  />
+                  <label htmlFor="file-upload-new" className="cursor-pointer">
+                    <div className="text-gray-600">
+                      <div className="text-lg mb-2">📷</div>
+                      <div className="font-medium">Haz clic para seleccionar fotos</div>
+                      <div className="text-sm">o arrastra las imágenes aquí</div>
+                      <div className="text-xs text-gray-500 mt-1">JPG, PNG, WebP, GIF (máx 5MB cada una)</div>
+                    </div>
+                  </label>
+                </div>
+                {newImages.length > 0 && (
+                  <div className="mt-3">
+                    <div className="text-sm font-medium text-gray-700 mb-2">Imágenes seleccionadas ({newImages.length}):</div>
+                    <div className="flex flex-wrap gap-2">
+                      {newImages.map((file, idx) => (
+                        <div key={idx} className="relative">
+                          <img 
+                            src={URL.createObjectURL(file)} 
+                            alt={`Preview ${idx + 1}`}
+                            className="w-16 h-16 object-cover rounded-lg border border-gray-200"
+                          />
+                          <button
+                            onClick={() => setNewImages(prev => prev.filter((_, i) => i !== idx))}
+                            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-            
             <div className="flex gap-3 mt-6">
-              <Button
-                onClick={() => setIsWriteModalOpen(false)}
-                variant="outline"
-                className="flex-1 border-gray-300 hover:bg-gray-50"
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={addNewMessage}
-                className="flex-1 bg-pink-500 hover:bg-pink-600 shadow-lg hover:shadow-xl transition-all duration-200"
-              >
-                Guardar
-              </Button>
+              <Button onClick={() => setIsWriteModalOpen(false)} variant="outline" className="flex-1 border-gray-300 hover:bg-gray-50">Cancelar</Button>
+              <Button onClick={addNewMessage} disabled={saving} className="flex-1 bg-pink-500 hover:bg-pink-600 shadow-lg hover:shadow-xl transition-all duration-200">{saving ? 'Guardando...' : 'Guardar'}</Button>
             </div>
           </div>
         </div>
@@ -484,69 +416,88 @@ export function MensajesSection() {
         <div className="fixed inset-0 modal-overlay flex items-center justify-center z-50">
           <div className="modal-content bg-white rounded-lg p-6 w-full max-w-md mx-4 shadow-2xl">
             <h3 className="text-xl font-semibold mb-4 text-gray-800">Editar Mensaje</h3>
-            
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Título
-                </label>
-                <Input
-                  value={newMessage.title}
-                  onChange={(e) => setNewMessage(prev => ({ ...prev, title: e.target.value }))}
-                  placeholder="Título del mensaje"
-                  className="border-gray-300 focus:border-pink-500 focus:ring-pink-500"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Título</label>
+                <Input value={newMessage.title} onChange={(e) => setNewMessage(prev => ({ ...prev, title: e.target.value }))} placeholder="Título del mensaje" className="border-gray-300 focus:border-pink-500 focus:ring-pink-500" />
               </div>
-              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Categoría
-                </label>
-                <select
-                  value={newMessage.category}
-                  onChange={(e) => setNewMessage(prev => ({ ...prev, category: e.target.value }))}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:border-pink-500 focus:ring-pink-500"
-                >
-                  {categories.map(category => (
-                    <option key={category.name} value={category.name}>
-                      {category.name}
-                    </option>
-                  ))}
+                <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+                <select value={newMessage.category} onChange={(e) => setNewMessage(prev => ({ ...prev, category: e.target.value }))} className="w-full p-2 border border-gray-300 rounded-md focus:border-pink-500 focus:ring-pink-500">
+                  {categories.map(category => (<option key={category.name} value={category.name}>{category.name}</option>))}
                 </select>
               </div>
-              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Mensaje
-                </label>
-                <textarea
-                  value={newMessage.content}
-                  onChange={(e) => setNewMessage(prev => ({ ...prev, content: e.target.value }))}
-                  placeholder="Escribe tu mensaje aquí..."
-                  rows={4}
-                  className="w-full p-2 border border-gray-300 rounded-md resize-none focus:border-pink-500 focus:ring-pink-500"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Mensaje</label>
+                <textarea value={newMessage.content} onChange={(e) => setNewMessage(prev => ({ ...prev, content: e.target.value }))} placeholder="Escribe tu mensaje aquí..." rows={4} className="w-full p-2 border border-gray-300 rounded-md resize-none focus:border-pink-500 focus:ring-pink-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fotos (opcional)</label>
+                {editingMessage?.images && editingMessage.images.length > 0 && (
+                  <div className="mb-3">
+                    <div className="text-sm font-medium text-gray-700 mb-2">Imágenes actuales:</div>
+                    <div className="flex flex-wrap gap-2">
+                      {editingMessage.images.map((imageUrl, idx) => (
+                        <div key={idx} className="relative">
+                          <img 
+                            src={imageUrl} 
+                            alt={`Imagen actual ${idx + 1}`}
+                            className="w-16 h-16 object-cover rounded-lg border border-gray-200"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div 
+                  className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-pink-400 transition-colors"
+                  onDrop={(e) => handleDrop(e, setNewImages)}
+                  onDragOver={handleDragOver}
+                >
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    multiple 
+                    onChange={(e) => setNewImages(Array.from(e.target.files || []))} 
+                    className="hidden"
+                    id="file-upload-edit"
+                  />
+                  <label htmlFor="file-upload-edit" className="cursor-pointer">
+                    <div className="text-gray-600">
+                      <div className="text-lg mb-2">📷</div>
+                      <div className="font-medium">Haz clic para agregar más fotos</div>
+                      <div className="text-sm">o arrastra las imágenes aquí</div>
+                      <div className="text-xs text-gray-500 mt-1">JPG, PNG, WebP, GIF (máx 5MB cada una)</div>
+                    </div>
+                  </label>
+                </div>
+                {newImages.length > 0 && (
+                  <div className="mt-3">
+                    <div className="text-sm font-medium text-gray-700 mb-2">Nuevas imágenes ({newImages.length}):</div>
+                    <div className="flex flex-wrap gap-2">
+                      {newImages.map((file, idx) => (
+                        <div key={idx} className="relative">
+                          <img 
+                            src={URL.createObjectURL(file)} 
+                            alt={`Preview ${idx + 1}`}
+                            className="w-16 h-16 object-cover rounded-lg border border-gray-200"
+                          />
+                          <button
+                            onClick={() => setNewImages(prev => prev.filter((_, i) => i !== idx))}
+                            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-            
             <div className="flex gap-3 mt-6">
-              <Button
-                onClick={() => {
-                  setIsEditModalOpen(false)
-                  setEditingMessage(null)
-                  setNewMessage({ title: '', content: '', category: 'Amor' })
-                }}
-                variant="outline"
-                className="flex-1 border-gray-300 hover:bg-gray-50"
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={saveEditedMessage}
-                className="flex-1 bg-pink-500 hover:bg-pink-600 shadow-lg hover:shadow-xl transition-all duration-200"
-              >
-                Guardar Cambios
-              </Button>
+              <Button onClick={() => { setIsEditModalOpen(false); setEditingMessage(null); setNewMessage({ title: '', content: '', category: 'Amor' }); setNewImages([]) }} variant="outline" className="flex-1 border-gray-300 hover:bg-gray-50">Cancelar</Button>
+              <Button onClick={saveEditedMessage} disabled={saving} className="flex-1 bg-pink-500 hover:bg-pink-600 shadow-lg hover:shadow-xl transition-all duration-200">{saving ? 'Guardando...' : 'Guardar Cambios'}</Button>
             </div>
           </div>
         </div>

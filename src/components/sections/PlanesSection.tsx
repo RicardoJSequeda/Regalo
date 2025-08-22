@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Progress } from '@/components/ui/progress'
-import { ImageUpload } from '@/components/ui/file-upload'
+import { FileUpload } from '@/components/ui/file-upload'
 import { 
   Dialog, 
   DialogContent, 
@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/select'
 import { useReminders } from '@/hooks/useReminders'
 import { useAchievements } from '@/hooks/useAchievements'
-import { useLocalStorage } from '@/hooks/useLocalStorage'
+import { getBrowserClient } from '@/lib/supabase/browser-client'
 import { 
   Plus, 
   Calendar, 
@@ -55,7 +55,8 @@ import {
   Trophy,
   Star,
   Target,
-  Award
+  Award,
+  X
 } from 'lucide-react'
 
 const defaultPlans: Plan[] = [
@@ -310,7 +311,9 @@ const predefinedTags = [
 ]
 
 export function PlanesSection() {
-  const { value: plans, setValue: setPlans } = useLocalStorage<Plan[]>('plans', defaultPlans)
+  const [plans, setPlans] = useState<Plan[]>([])
+  const [loading, setLoading] = useState(true)
+  const supabase = getBrowserClient()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null)
@@ -352,7 +355,48 @@ export function PlanesSection() {
   })
   const [planImage, setPlanImage] = useState<string>('')
 
+  // Cargar planes desde Supabase
+  useEffect(() => {
+    loadPlans()
+  }, [])
 
+  const loadPlans = async () => {
+    try {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('plans')
+        .select('*')
+        .order('date', { ascending: true })
+
+      if (error) {
+        console.error('Error loading plans:', error)
+        return
+      }
+
+      setPlans(data || [])
+    } catch (error) {
+      console.error('Error loading plans:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Suscripción en tiempo real
+  useEffect(() => {
+    const channel = supabase
+      .channel('plans_changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'plans' }, 
+        () => {
+          loadPlans()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [supabase])
 
   const getCategoryIcon = (categoryId: string) => {
     const category = categories.find(c => c.id === categoryId)
@@ -441,69 +485,115 @@ export function PlanesSection() {
     setPlanImage('')
   }
 
-  const handleCreatePlan = () => {
-    const newPlan: Plan = {
-      id: Date.now(),
-      title: planForm.title,
-      description: planForm.description,
-      date: planForm.date,
-      time: planForm.time || undefined,
-      location: planForm.location || undefined,
-      category: planForm.category,
-      priority: planForm.priority,
-      status: planForm.status,
-      notes: planForm.notes || undefined,
-      image: planImage || undefined,
-      participants: planForm.participants ? planForm.participants.split(',').map(p => p.trim()) : undefined,
-      tags: planForm.tags.length > 0 ? planForm.tags : undefined,
-      reminder: planForm.reminderEnabled ? {
-        enabled: true,
-        time: planForm.reminderTime,
-        type: planForm.reminderType
-      } : undefined,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
+  const handleCreatePlan = async () => {
+    try {
+      const planData = {
+        title: planForm.title,
+        description: planForm.description,
+        date: planForm.date,
+        time: planForm.time || null,
+        location: planForm.location || null,
+        category: planForm.category,
+        priority: planForm.priority,
+        status: planForm.status,
+        notes: planForm.notes || null,
+        image: planImage || null,
+        participants: planForm.participants ? planForm.participants.split(',').map(p => p.trim()) : [],
+        tags: planForm.tags.length > 0 ? planForm.tags : [],
+        reminder: planForm.reminderEnabled ? {
+          enabled: true,
+          time: planForm.reminderTime,
+          type: planForm.reminderType
+        } : { enabled: false, time: '1h', type: 'notification' }
+      }
 
-    setPlans(prev => [...prev, newPlan])
-    setShowCreateModal(false)
-    resetForm()
+      const { data, error } = await supabase
+        .from('plans')
+        .insert([planData])
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error creating plan:', error)
+        alert('Error al crear el plan')
+        return
+      }
+
+      setShowCreateModal(false)
+      resetForm()
+      await loadPlans() // Recargar planes
+    } catch (error) {
+      console.error('Error creating plan:', error)
+      alert('Error al crear el plan')
+    }
   }
 
-  const handleEditPlan = () => {
+  const handleEditPlan = async () => {
     if (!editingPlan) return
 
-    const updatedPlan: Plan = {
-      ...editingPlan,
-      title: planForm.title,
-      description: planForm.description,
-      date: planForm.date,
-      time: planForm.time || undefined,
-      location: planForm.location || undefined,
-      category: planForm.category,
-      priority: planForm.priority,
-      status: planForm.status,
-      notes: planForm.notes || undefined,
-      image: planImage || undefined,
-      participants: planForm.participants ? planForm.participants.split(',').map(p => p.trim()) : undefined,
-      tags: planForm.tags.length > 0 ? planForm.tags : undefined,
-      reminder: planForm.reminderEnabled ? {
-        enabled: true,
-        time: planForm.reminderTime,
-        type: planForm.reminderType
-      } : undefined,
-      updatedAt: new Date().toISOString()
-    }
+    try {
+      const planData = {
+        title: planForm.title,
+        description: planForm.description,
+        date: planForm.date,
+        time: planForm.time || null,
+        location: planForm.location || null,
+        category: planForm.category,
+        priority: planForm.priority,
+        status: planForm.status,
+        notes: planForm.notes || null,
+        image: planImage || null,
+        participants: planForm.participants ? planForm.participants.split(',').map(p => p.trim()) : [],
+        tags: planForm.tags.length > 0 ? planForm.tags : [],
+        reminder: planForm.reminderEnabled ? {
+          enabled: true,
+          time: planForm.reminderTime,
+          type: planForm.reminderType
+        } : { enabled: false, time: '1h', type: 'notification' }
+      }
 
-    setPlans(prev => prev.map(plan => plan.id === editingPlan.id ? updatedPlan : plan))
-    setShowEditModal(false)
-    setEditingPlan(null)
-    resetForm()
+      const { data, error } = await supabase
+        .from('plans')
+        .update(planData)
+        .eq('id', editingPlan.id)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error updating plan:', error)
+        alert('Error al actualizar el plan')
+        return
+      }
+
+      setShowEditModal(false)
+      setEditingPlan(null)
+      resetForm()
+      await loadPlans() // Recargar planes
+    } catch (error) {
+      console.error('Error updating plan:', error)
+      alert('Error al actualizar el plan')
+    }
   }
 
-  const handleDeletePlan = (planId: number) => {
+  const handleDeletePlan = async (planId: string) => {
     if (confirm('¿Estás seguro de que quieres eliminar este plan?')) {
-      setPlans(prev => prev.filter(plan => plan.id !== planId))
+      try {
+        const { error } = await supabase
+          .from('plans')
+          .delete()
+          .eq('id', planId)
+
+        if (error) {
+          console.error('Error deleting plan:', error)
+          alert('Error al eliminar el plan')
+          return
+        }
+
+        await loadPlans() // Recargar planes
+      } catch (error) {
+        console.error('Error deleting plan:', error)
+        alert('Error al eliminar el plan')
+      }
     }
   }
 
@@ -531,12 +621,24 @@ export function PlanesSection() {
     setShowEditModal(true)
   }
 
-  const updatePlanStatus = (planId: number, newStatus: Plan['status']) => {
-    setPlans(prev => prev.map(plan => 
-      plan.id === planId 
-        ? { ...plan, status: newStatus, updatedAt: new Date().toISOString() }
-        : plan
-    ))
+  const updatePlanStatus = async (planId: string, newStatus: Plan['status']) => {
+    try {
+      const { error } = await supabase
+        .from('plans')
+        .update({ status: newStatus })
+        .eq('id', planId)
+
+      if (error) {
+        console.error('Error updating plan status:', error)
+        alert('Error al actualizar el estado del plan')
+        return
+      }
+
+      await loadPlans() // Recargar planes
+    } catch (error) {
+      console.error('Error updating plan status:', error)
+      alert('Error al actualizar el estado del plan')
+    }
   }
 
   const stats = getStats()
@@ -726,7 +828,9 @@ export function PlanesSection() {
                 {getProgressPercentage()}% completado
               </span>
             </div>
-            <Progress value={getProgressPercentage()} className="h-3" />
+            <div className="h-3">
+  <Progress value={getProgressPercentage()} />
+</div>
           </CardContent>
         </Card>
 
@@ -751,7 +855,9 @@ export function PlanesSection() {
                   {getUnlockedAchievements().length} de {achievements.length} desbloqueados
                 </span>
               </div>
-              <Progress value={getAchievementProgress()} className="h-3 w-24" />
+              <div className="h-3 w-24">
+  <Progress value={getAchievementProgress()} />
+</div>
             </div>
           </CardContent>
         </Card>
@@ -901,8 +1007,8 @@ export function PlanesSection() {
                   key={plan.id}
                   plan={plan}
                   onEdit={() => openEditModal(plan)}
-                  onDelete={() => handleDeletePlan(plan.id)}
-                  onStatusChange={(status) => updatePlanStatus(plan.id, status)}
+                  onDelete={() => handleDeletePlan(plan.id.toString())}
+                  onStatusChange={(status) => updatePlanStatus(plan.id.toString(), status)}
                   getCategoryIcon={getCategoryIcon}
                   getCategoryColor={getCategoryColor}
                   getPriorityColor={getPriorityColor}
@@ -921,8 +1027,8 @@ export function PlanesSection() {
                     key={plan.id}
                     plan={plan}
                     onEdit={() => openEditModal(plan)}
-                    onDelete={() => handleDeletePlan(plan.id)}
-                    onStatusChange={(newStatus) => updatePlanStatus(plan.id, newStatus)}
+                    onDelete={() => handleDeletePlan(plan.id.toString())}
+                    onStatusChange={(newStatus) => updatePlanStatus(plan.id.toString(), newStatus)}
                     getCategoryIcon={getCategoryIcon}
                     getCategoryColor={getCategoryColor}
                     getPriorityColor={getPriorityColor}
@@ -1054,7 +1160,9 @@ export function PlanesSection() {
                       {getAchievementProgress()}% completado
                     </span>
                   </div>
-                  <Progress value={getAchievementProgress()} className="h-3" />
+                  <div className="h-3">
+  <Progress value={getAchievementProgress()} />
+</div>
                   <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                     <div>
                       <p className="text-2xl font-bold text-pink-600">{getUnlockedAchievements().length}</p>
@@ -1111,10 +1219,11 @@ export function PlanesSection() {
                                 <span>Progreso</span>
                                 <span>{achievement.progress}/{achievement.maxProgress}</span>
                               </div>
-                              <Progress 
-                                value={(achievement.progress / achievement.maxProgress) * 100} 
-                                className="h-2" 
-                              />
+                              <div className="h-2">
+                                <Progress 
+                                  value={(achievement.progress / achievement.maxProgress) * 100} 
+                                />
+                              </div>
                             </div>
                           )}
 
@@ -1151,8 +1260,8 @@ interface CalendarViewProps {
   goToNextMonth: () => void
   goToToday: () => void
   onEditPlan: (plan: Plan) => void
-  onDeletePlan: (planId: number) => void
-  onStatusChange: (planId: number, status: Plan['status']) => void
+  onDeletePlan: (planId: string) => void
+  onStatusChange: (planId: string, status: Plan['status']) => void
   getCategoryIcon: (categoryId: string) => any
   getCategoryColor: (categoryId: string) => string
   getPriorityColor: (priority: string) => string
@@ -1978,12 +2087,32 @@ function PlanForm({
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Imagen del plan
         </label>
-        <ImageUpload
-          currentImage={image}
-          onFileSelect={(file, dataUrl) => setImage(dataUrl)}
-          onRemove={() => setImage('')}
-          placeholder="Subir imagen del plan"
-        />
+        <div className="space-y-2">
+          {image && (
+            <div className="relative">
+              <img 
+                src={image} 
+                alt="Preview" 
+                className="w-full h-32 object-cover rounded-lg"
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setImage('')}
+                className="absolute top-2 right-2 bg-white/80 hover:bg-white"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+          <FileUpload
+            onFileSelect={(file, dataUrl) => setImage(dataUrl)}
+            accept="image/*"
+            placeholder="Subir imagen del plan"
+            className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-pink-400 cursor-pointer"
+          />
+        </div>
       </div>
 
       {/* Submit Button */}

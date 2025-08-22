@@ -26,27 +26,14 @@ import {
   Camera,
   X,
   Save,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Loader2
 } from 'lucide-react'
-import { useLocalStorage } from '@/hooks/useLocalStorage'
+import { getBrowserClient } from '@/lib/supabase/browser-client'
+import { uploadPublicFile } from '@/lib/supabase/storage'
+import { Gift as GiftType, GiftForm } from '@/features/gifts/types'
 
-interface Gift {
-  id: string
-  name: string
-  description: string
-  category: 'romantico' | 'practico' | 'tecnologico' | 'moda' | 'hogar' | 'experiencia' | 'otro'
-  type: 'deseo' | 'recibido' | 'regalado'
-  price: number
-  priority: 'alta' | 'media' | 'baja'
-  date: string
-  occasion: string
-  image?: string
-  rating?: number
-  notes?: string
-  isFavorite: boolean
-  purchased: boolean
-  recipient: 'yo' | 'pareja' | 'ambos'
-}
+// Usar el tipo de GiftType importado
 
 const categories = [
   { value: 'romantico', label: 'Romántico', icon: '💕' },
@@ -72,79 +59,79 @@ const occasions = [
 ]
 
 export function RegalosSection() {
-  const { value: gifts, setValue: setGifts } = useLocalStorage<Gift[]>('gifts', [
-    {
-      id: '1',
-      name: 'Anillo de Compromiso',
-      description: 'Un anillo especial para el momento perfecto',
-      category: 'romantico',
-      type: 'deseo',
-      price: 2500,
-      priority: 'alta',
-      date: '2024-12-25',
-      occasion: 'Navidad',
-      rating: 5,
-      notes: 'Diamante de 1 quilate, oro blanco',
-      isFavorite: true,
-      purchased: false,
-      recipient: 'pareja'
-    },
-    {
-      id: '2',
-      name: 'Reloj Inteligente',
-      description: 'Para monitorear su salud y estar conectados',
-      category: 'tecnologico',
-      type: 'recibido',
-      price: 350,
-      priority: 'media',
-      date: '2024-02-14',
-      occasion: 'San Valentín',
-      rating: 4,
-      notes: 'Apple Watch Series 9',
-      isFavorite: false,
-      purchased: true,
-      recipient: 'yo'
-    },
-    {
-      id: '3',
-      name: 'Cena Romántica',
-      description: 'Una cena especial en su restaurante favorito',
-      category: 'experiencia',
-      type: 'regalado',
-      price: 120,
-      priority: 'alta',
-      date: '2024-01-15',
-      occasion: 'Aniversario',
-      rating: 5,
-      notes: 'Restaurante La Casa del Amor',
-      isFavorite: true,
-      purchased: true,
-      recipient: 'ambos'
-    }
-  ])
+  const [gifts, setGifts] = useState<GiftType[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
 
   const [showAddModal, setShowAddModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [selectedGift, setSelectedGift] = useState<Gift | null>(null)
+  const [selectedGift, setSelectedGift] = useState<GiftType | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedFilter, setSelectedFilter] = useState('Todos')
   const [selectedCategory, setSelectedCategory] = useState('Todas')
   const [selectedType, setSelectedType] = useState('Todos')
 
-  const [giftForm, setGiftForm] = useState({
+  const [giftForm, setGiftForm] = useState<GiftForm>({
     name: '',
     description: '',
-    category: 'romantico' as Gift['category'],
-    type: 'deseo' as Gift['type'],
+    category: 'romantico',
+    type: 'deseo',
     price: 0,
-    priority: 'media' as Gift['priority'],
+    priority: 'media',
     date: '',
     occasion: '',
     notes: '',
-    recipient: 'pareja' as Gift['recipient'],
-    image: null as File | null
+    recipient: 'pareja',
+    image: null
   })
+
+  // Cargar regalos desde Supabase
+  useEffect(() => {
+    const fetchGifts = async () => {
+      try {
+        setLoading(true)
+        const response = await fetch('/api/gifts')
+        if (response.ok) {
+          const data = await response.json()
+          setGifts(data)
+        } else {
+          console.error('Error fetching gifts')
+        }
+      } catch (error) {
+        console.error('Error fetching gifts:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchGifts()
+  }, [])
+
+  // Suscripción en tiempo real
+  useEffect(() => {
+    const supabase = getBrowserClient()
+    
+    const channel = supabase
+      .channel('gifts_changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'gifts' },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            setGifts(prev => [payload.new as GiftType, ...prev])
+          } else if (payload.eventType === 'UPDATE') {
+            setGifts(prev => prev.map(g => g.id === payload.new.id ? payload.new as GiftType : g))
+          } else if (payload.eventType === 'DELETE') {
+            setGifts(prev => prev.filter(g => g.id !== payload.old.id))
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
 
   // Estadísticas
   const stats = {
@@ -188,7 +175,7 @@ export function RegalosSection() {
     setShowAddModal(true)
   }
 
-  const openEditModal = (gift: Gift) => {
+  const openEditModal = (gift: GiftType) => {
     setSelectedGift(gift)
     setGiftForm({
       name: gift.name,
@@ -206,31 +193,35 @@ export function RegalosSection() {
     setShowEditModal(true)
   }
 
-  const openDeleteModal = (gift: Gift) => {
+  const openDeleteModal = (gift: GiftType) => {
     setSelectedGift(gift)
     setShowDeleteModal(true)
   }
 
-  const handleSaveGift = () => {
+  const handleSaveGift = async () => {
     if (!giftForm.name || !giftForm.description) return
 
-    let imageUrl = undefined
-    if (giftForm.image) {
-      imageUrl = URL.createObjectURL(giftForm.image)
-    }
+    try {
+      setSaving(true)
+      let imageUrl = undefined
 
-    if (showEditModal && selectedGift) {
-      // Editar regalo existente
-      setGifts(prev => prev.map(g => 
-        g.id === selectedGift.id 
-          ? { ...g, ...giftForm, image: imageUrl || g.image }
-          : g
-      ))
-      setShowEditModal(false)
-    } else {
-      // Agregar nuevo regalo
-      const newGift: Gift = {
-        id: Date.now().toString(),
+      // Subir imagen si existe
+      if (giftForm.image) {
+        try {
+          const uploadResult = await uploadPublicFile(
+            'gift-images',
+            giftForm.image,
+            'gifts/'
+          )
+          
+          imageUrl = uploadResult.url
+        } catch (error) {
+          console.error('Error uploading image:', error)
+          return
+        }
+      }
+
+      const giftData = {
         name: giftForm.name,
         description: giftForm.description,
         category: giftForm.category,
@@ -242,42 +233,97 @@ export function RegalosSection() {
         notes: giftForm.notes,
         recipient: giftForm.recipient,
         image: imageUrl,
-        rating: undefined,
-        isFavorite: false,
         purchased: giftForm.type === 'regalado' || giftForm.type === 'recibido'
       }
-      setGifts(prev => [newGift, ...prev])
-      setShowAddModal(false)
-    }
 
-    // Limpiar formulario
-    setGiftForm({
-      name: '',
-      description: '',
-      category: 'romantico',
-      type: 'deseo',
-      price: 0,
-      priority: 'media',
-      date: '',
-      occasion: '',
-      notes: '',
-      recipient: 'pareja',
-      image: null
-    })
+      if (showEditModal && selectedGift) {
+        // Editar regalo existente
+        const response = await fetch(`/api/gifts/${selectedGift.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(giftData)
+        })
+
+        if (!response.ok) {
+          console.error('Error updating gift')
+          return
+        }
+
+        setShowEditModal(false)
+      } else {
+        // Agregar nuevo regalo
+        const response = await fetch('/api/gifts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(giftData)
+        })
+
+        if (!response.ok) {
+          console.error('Error creating gift')
+          return
+        }
+
+        setShowAddModal(false)
+      }
+
+      // Limpiar formulario
+      setGiftForm({
+        name: '',
+        description: '',
+        category: 'romantico',
+        type: 'deseo',
+        price: 0,
+        priority: 'media',
+        date: '',
+        occasion: '',
+        notes: '',
+        recipient: 'pareja',
+        image: null
+      })
+    } catch (error) {
+      console.error('Error saving gift:', error)
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleDeleteGift = () => {
-    if (selectedGift) {
-      setGifts(prev => prev.filter(g => g.id !== selectedGift.id))
+  const handleDeleteGift = async () => {
+    if (!selectedGift) return
+
+    try {
+      const response = await fetch(`/api/gifts/${selectedGift.id}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        console.error('Error deleting gift')
+        return
+      }
+
       setShowDeleteModal(false)
       setSelectedGift(null)
+    } catch (error) {
+      console.error('Error deleting gift:', error)
     }
   }
 
-  const toggleFavorite = (giftId: string) => {
-    setGifts(prev => prev.map(g => 
-      g.id === giftId ? { ...g, isFavorite: !g.isFavorite } : g
-    ))
+  const toggleFavorite = async (giftId: string) => {
+    try {
+      const gift = gifts.find(g => g.id === giftId)
+      if (!gift) return
+
+      const response = await fetch(`/api/gifts/${giftId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isFavorite: !gift.isFavorite })
+      })
+
+      if (!response.ok) {
+        console.error('Error toggling favorite')
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error)
+    }
   }
 
   const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -427,8 +473,16 @@ export function RegalosSection() {
       </Card>
 
       {/* Lista de Regalos */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredGifts.map((gift) => (
+      {loading ? (
+        <div className="flex justify-center items-center py-12">
+          <div className="flex items-center gap-3">
+            <Loader2 className="h-8 w-8 animate-spin text-pink-500" />
+            <span className="text-lg text-gray-600">Cargando regalos...</span>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredGifts.map((gift) => (
           <motion.div
             key={gift.id}
             initial={{ opacity: 0, y: 20 }}
@@ -536,8 +590,9 @@ export function RegalosSection() {
               </CardContent>
             </Card>
           </motion.div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Modal para Agregar/Editar Regalo */}
       <Dialog open={showAddModal || showEditModal} onOpenChange={() => {
@@ -601,7 +656,7 @@ export function RegalosSection() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Categoría
                 </label>
-                <Select value={giftForm.category} onValueChange={(value: Gift['category']) => setGiftForm(prev => ({ ...prev, category: value }))}>
+                <Select value={giftForm.category} onValueChange={(value: GiftType['category']) => setGiftForm(prev => ({ ...prev, category: value }))}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -619,7 +674,7 @@ export function RegalosSection() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Tipo
                 </label>
-                <Select value={giftForm.type} onValueChange={(value: Gift['type']) => setGiftForm(prev => ({ ...prev, type: value }))}>
+                <Select value={giftForm.type} onValueChange={(value: GiftType['type']) => setGiftForm(prev => ({ ...prev, type: value }))}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -635,7 +690,7 @@ export function RegalosSection() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Prioridad
                 </label>
-                <Select value={giftForm.priority} onValueChange={(value: Gift['priority']) => setGiftForm(prev => ({ ...prev, priority: value }))}>
+                <Select value={giftForm.priority} onValueChange={(value: GiftType['priority']) => setGiftForm(prev => ({ ...prev, priority: value }))}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -686,7 +741,7 @@ export function RegalosSection() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Para
                 </label>
-                <Select value={giftForm.recipient} onValueChange={(value: Gift['recipient']) => setGiftForm(prev => ({ ...prev, recipient: value }))}>
+                <Select value={giftForm.recipient} onValueChange={(value: GiftType['recipient']) => setGiftForm(prev => ({ ...prev, recipient: value }))}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -769,11 +824,15 @@ export function RegalosSection() {
             </Button>
             <Button
               onClick={handleSaveGift}
-              disabled={!giftForm.name || !giftForm.description}
+              disabled={!giftForm.name || !giftForm.description || saving}
               className="bg-pink-500 hover:bg-pink-600"
             >
-              <Save className="h-4 w-4 mr-2" />
-              Guardar
+              {saving ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4 mr-2" />
+              )}
+              {saving ? 'Guardando...' : 'Guardar'}
             </Button>
           </DialogFooter>
         </DialogContent>

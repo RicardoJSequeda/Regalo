@@ -34,31 +34,18 @@ import {
   Beef,
   Salad,
   Soup,
-  Dessert
+  Dessert,
+  Loader2,
+  BookOpen,
+  ChefHat as ChefHatIcon,
+  Lightbulb,
+  CheckCircle,
+  CheckCircle2,
+  XCircle
 } from 'lucide-react'
-import { useLocalStorage } from '@/hooks/useLocalStorage'
-
-interface Recipe {
-  id: string
-  title: string
-  description: string
-  category: 'desayuno' | 'almuerzo' | 'cena' | 'postre' | 'bebida' | 'snack' | 'sopa' | 'ensalada' | 'pasta' | 'carne' | 'pescado' | 'vegetariano' | 'vegano' | 'otro'
-  cuisine: 'mexicana' | 'italiana' | 'china' | 'japonesa' | 'francesa' | 'española' | 'americana' | 'mediterranea' | 'asiatica' | 'otra'
-  difficulty: 'facil' | 'medio' | 'dificil'
-  prepTime: number
-  cookTime: number
-  servings: number
-  ingredients: string[]
-  instructions: string[]
-  tips?: string
-  author: 'yo' | 'pareja' | 'ambos'
-  isFavorite: boolean
-  rating?: number
-  tags: string[]
-  images?: string[]
-  createdAt: string
-  updatedAt: string
-}
+import { getBrowserClient } from '@/lib/supabase/browser-client'
+import { uploadPublicFile } from '@/lib/supabase/storage'
+import { Recipe, RecipeForm } from '@/features/recipes/types'
 
 const categories = [
   { value: 'desayuno', label: 'Desayuno', icon: '🌅' },
@@ -96,150 +83,114 @@ const predefinedTags = [
 ]
 
 export function RecetasSection() {
-  const { value: recipes, setValue: setRecipes } = useLocalStorage<Recipe[]>('recipes', [
-    {
-      id: '1',
-      title: 'Pasta Carbonara Romántica',
-      description: 'Una deliciosa pasta carbonara perfecta para una cena romántica en casa',
-      category: 'cena',
-      cuisine: 'italiana',
-      difficulty: 'medio',
-      prepTime: 15,
-      cookTime: 20,
-      servings: 2,
-      ingredients: [
-        '200g spaghetti',
-        '100g panceta o tocino',
-        '2 huevos',
-        '50g queso parmesano rallado',
-        'Pimienta negra molida',
-        'Sal al gusto'
-      ],
-      instructions: [
-        'Cocina la pasta en agua con sal hasta que esté al dente',
-        'Mientras tanto, corta la panceta en trozos pequeños y fríela hasta que esté crujiente',
-        'En un bowl, bate los huevos con el queso parmesano y pimienta',
-        'Escurre la pasta y mézclala inmediatamente con la mezcla de huevos',
-        'Agrega la panceta y revuelve suavemente',
-        'Sirve caliente con queso parmesano adicional'
-      ],
-      tips: 'El secreto está en mezclar la pasta caliente con los huevos para crear una salsa cremosa sin que se cuajen.',
-      author: 'ambos',
-      isFavorite: true,
-      rating: 5,
-      tags: ['Romántico', 'Favorito', 'Italiana'],
-      createdAt: '2024-01-15T10:00:00Z',
-      updatedAt: '2024-01-15T10:00:00Z'
-    },
-    {
-      id: '2',
-      title: 'Smoothie de Frutos Rojos',
-      description: 'Un refrescante smoothie perfecto para el desayuno o merienda',
-      category: 'bebida',
-      cuisine: 'otra',
-      difficulty: 'facil',
-      prepTime: 5,
-      cookTime: 0,
-      servings: 2,
-      ingredients: [
-        '1 taza de frutos rojos (fresas, frambuesas, moras)',
-        '1 plátano',
-        '1 taza de leche o leche de almendras',
-        '1 cucharada de miel',
-        'Hielo al gusto'
-      ],
-      instructions: [
-        'Lava y prepara las frutas',
-        'Coloca todos los ingredientes en la licuadora',
-        'Licúa hasta obtener una mezcla suave',
-        'Sirve inmediatamente'
-      ],
-      author: 'yo',
-      isFavorite: false,
-      rating: 4,
-      tags: ['Saludable', 'Rápido', 'Fácil'],
-      createdAt: '2024-01-10T15:30:00Z',
-      updatedAt: '2024-01-10T15:30:00Z'
-    },
-    {
-      id: '3',
-      title: 'Brownies de Chocolate',
-      description: 'Brownies caseros con chocolate negro, perfectos para compartir',
-      category: 'postre',
-      cuisine: 'americana',
-      difficulty: 'medio',
-      prepTime: 20,
-      cookTime: 25,
-      servings: 8,
-      ingredients: [
-        '200g chocolate negro',
-        '150g mantequilla',
-        '3 huevos',
-        '200g azúcar',
-        '100g harina',
-        '1 cucharadita de vainilla',
-        'Pizca de sal'
-      ],
-      instructions: [
-        'Precalienta el horno a 180°C',
-        'Derrite el chocolate con la mantequilla al baño maría',
-        'Bate los huevos con el azúcar hasta que estén espumosos',
-        'Mezcla el chocolate derretido con los huevos',
-        'Agrega la harina, vainilla y sal',
-        'Vierte en un molde engrasado y hornea 25 minutos'
-      ],
-      tips: 'No los cocines demasiado, deben quedar un poco húmedos en el centro.',
-      author: 'pareja',
-      isFavorite: true,
-      rating: 5,
-      tags: ['Dulce', 'Favorito', 'Chocolate'],
-      createdAt: '2024-01-08T19:00:00Z',
-      updatedAt: '2024-01-08T19:00:00Z'
+  const supabase = getBrowserClient()
+  const [recipes, setRecipes] = useState<Recipe[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  // Cargar recetas
+  useEffect(() => {
+    const loadRecipes = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('recipes')
+          .select('*')
+          .order('created_at', { ascending: false })
+
+        if (error) {
+          console.error('Error loading recipes:', error)
+        } else {
+          setRecipes(data || [])
+        }
+      } catch (error) {
+        console.error('Error in loadRecipes:', error)
+      } finally {
+        setLoading(false)
+      }
     }
-  ])
+
+    loadRecipes()
+
+    // Real-time updates
+    const channel = supabase
+      .channel('recipes-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'recipes' }, () => loadRecipes())
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [supabase])
 
   const [showAddModal, setShowAddModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [showInstructionsModal, setShowInstructionsModal] = useState(false)
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null)
+  const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null)
+
+  // Limpiar notificación automáticamente
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => {
+        setNotification(null)
+      }, 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [notification])
+
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('Todas')
   const [selectedDifficulty, setSelectedDifficulty] = useState('Todas')
 
-  const [recipeForm, setRecipeForm] = useState({
+  const [recipeForm, setRecipeForm] = useState<RecipeForm>({
     title: '',
     description: '',
-    category: 'cena' as Recipe['category'],
-    cuisine: 'otra' as Recipe['cuisine'],
-    difficulty: 'medio' as Recipe['difficulty'],
+    category: 'cena',
+    cuisine: 'otra',
+    difficulty: 'medio',
     prepTime: 30,
     cookTime: 30,
     servings: 2,
-    ingredients: [''] as string[],
-    instructions: [''] as string[],
+    ingredients: [''],
+    instructions: [''],
     tips: '',
-    author: 'yo' as Recipe['author'],
-    tags: [] as string[],
-    images: [] as File[]
+    author: 'yo',
+    tags: [],
+    images: []
   })
 
   // Estadísticas
   const stats = {
     totalRecipes: recipes.length,
-    totalTime: recipes.reduce((sum, recipe) => sum + recipe.prepTime + recipe.cookTime, 0),
-    averageRating: recipes.filter(r => r.rating).reduce((sum, r) => sum + (r.rating || 0), 0) / recipes.filter(r => r.rating).length || 0,
+    totalTime: recipes.reduce((sum, recipe) => {
+      const prepTime = (recipe as any).prepTime || (recipe as any).prep_time || 0
+      const cookTime = (recipe as any).cookTime || (recipe as any).cook_time || 0
+      return sum + prepTime + cookTime
+    }, 0),
+    averageRating: (() => {
+      const ratedRecipes = recipes.filter(r => r.rating && r.rating > 0)
+      if (ratedRecipes.length === 0) return 0
+      const totalRating = ratedRecipes.reduce((sum, r) => sum + (r.rating || 0), 0)
+      return totalRating / ratedRecipes.length
+    })(),
     favoriteRecipes: recipes.filter(r => r.isFavorite).length,
     mostPopularCategory: getMostPopularCategory(),
     easiestRecipes: recipes.filter(r => r.difficulty === 'facil').length
   }
 
   function getMostPopularCategory() {
+    if (recipes.length === 0) return 'N/A'
     const categoryCounts = recipes.reduce((acc, recipe) => {
-      acc[recipe.category] = (acc[recipe.category] || 0) + 1
+      const category = recipe.category || 'otro'
+      acc[category] = (acc[category] || 0) + 1
       return acc
     }, {} as Record<string, number>)
     
-    return Object.entries(categoryCounts).reduce((a, b) => categoryCounts[a[0]] > categoryCounts[b[0]] ? a : b)[0]
+    const entries = Object.entries(categoryCounts)
+    if (entries.length === 0) return 'N/A'
+    
+    return entries.reduce((a, b) => categoryCounts[a[0]] > categoryCounts[b[0]] ? a : b)[0]
   }
 
   // Filtrar recetas
@@ -300,86 +251,135 @@ export function RecetasSection() {
     setShowDeleteModal(true)
   }
 
-  const handleSaveRecipe = () => {
-    if (!recipeForm.title || !recipeForm.description) return
+  const openInstructionsModal = (recipe: Recipe) => {
+    setSelectedRecipe(recipe)
+    setShowInstructionsModal(true)
+  }
 
-    const now = new Date().toISOString()
-
-    let imageUrls: string[] = []
-    if (recipeForm.images.length > 0) {
-      imageUrls = recipeForm.images.map(img => URL.createObjectURL(img))
+  const handleSaveRecipe = async () => {
+    if (!recipeForm.title || !recipeForm.description) {
+      setNotification({ type: 'error', message: 'El título y la descripción son obligatorios' })
+      return
     }
 
-    if (showEditModal && selectedRecipe) {
-      // Editar receta existente
-      setRecipes(prev => prev.map(r => 
-        r.id === selectedRecipe.id 
-          ? { 
-              ...r, 
-              ...recipeForm, 
-              images: imageUrls.length > 0 ? imageUrls : r.images,
-              updatedAt: now
-            }
-          : r
-      ))
-      setShowEditModal(false)
-    } else {
-      // Agregar nueva receta
-      const newRecipe: Recipe = {
-        id: Date.now().toString(),
-        title: recipeForm.title,
-        description: recipeForm.description,
+    try {
+      setSaving(true)
+    let imageUrls: string[] = []
+
+      // Subir imágenes si hay nuevas
+    if (recipeForm.images.length > 0) {
+        const uploads = await Promise.all(
+          recipeForm.images.map((file, idx) => 
+            uploadPublicFile('recipe-images', file, `recipes/${Date.now()}-${idx}/`)
+          )
+        )
+        imageUrls = uploads.map(u => u.url)
+      }
+
+      const payload = {
+        title: recipeForm.title.trim(),
+        description: recipeForm.description.trim(),
         category: recipeForm.category,
         cuisine: recipeForm.cuisine,
         difficulty: recipeForm.difficulty,
-        prepTime: recipeForm.prepTime,
-        cookTime: recipeForm.cookTime,
-        servings: recipeForm.servings,
+        "prepTime": recipeForm.prepTime || 0,
+        "cookTime": recipeForm.cookTime || 0,
+        servings: recipeForm.servings || 1,
         ingredients: recipeForm.ingredients.filter(ing => ing.trim() !== ''),
         instructions: recipeForm.instructions.filter(inst => inst.trim() !== ''),
-        tips: recipeForm.tips,
+        tips: recipeForm.tips || '',
         author: recipeForm.author,
-        isFavorite: false,
-        tags: recipeForm.tags,
-        images: imageUrls,
-        createdAt: now,
-        updatedAt: now
+        "isFavorite": selectedRecipe?.isFavorite || false,
+        rating: selectedRecipe?.rating || null,
+        tags: recipeForm.tags || [],
+        images: imageUrls.length > 0 ? imageUrls : (selectedRecipe?.images || [])
       }
+
+             if (showEditModal && selectedRecipe) {
+         // Editar receta existente
+         const response = await fetch(`/api/recipes/${selectedRecipe.id}`, {
+           method: 'PATCH',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify(payload)
+         })
+
+         if (response.ok) {
+           const updatedRecipe = await response.json()
+           setRecipes(prev => prev.map(r => r.id === selectedRecipe.id ? updatedRecipe : r))
+           setShowEditModal(false)
+           setSelectedRecipe(null)
+           setNotification({ type: 'success', message: '¡Receta actualizada exitosamente!' })
+         } else {
+           const errorData = await response.json().catch(() => ({}))
+           console.error('Error response:', response.status, errorData)
+           const errorMessage = errorData.details || errorData.error || `Error ${response.status}`
+           setNotification({ type: 'error', message: `Error al actualizar la receta: ${errorMessage}` })
+         }
+       } else {
+         // Agregar nueva receta
+         const response = await fetch('/api/recipes', {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify(payload)
+         })
+
+         if (response.ok) {
+           const newRecipe = await response.json()
       setRecipes(prev => [newRecipe, ...prev])
       setShowAddModal(false)
-    }
-
-    // Limpiar formulario
-    setRecipeForm({
-      title: '',
-      description: '',
-      category: 'cena',
-      cuisine: 'otra',
-      difficulty: 'medio',
-      prepTime: 30,
-      cookTime: 30,
-      servings: 2,
-      ingredients: [''],
-      instructions: [''],
-      tips: '',
-      author: 'yo',
-      tags: [],
-      images: []
-    })
+           setNotification({ type: 'success', message: '¡Receta creada exitosamente!' })
+         } else {
+           const errorData = await response.json().catch(() => ({}))
+           console.error('Error response:', response.status, errorData)
+           const errorMessage = errorData.details || errorData.error || `Error ${response.status}`
+           setNotification({ type: 'error', message: `Error al crear la receta: ${errorMessage}` })
+         }
+       }
+         } catch (error) {
+       console.error('Error saving recipe:', error)
+       setNotification({ type: 'error', message: 'Error al guardar la receta' })
+     } finally {
+       setSaving(false)
+     }
   }
 
-  const handleDeleteRecipe = () => {
-    if (selectedRecipe) {
+  const handleDeleteRecipe = async () => {
+    if (!selectedRecipe) return
+
+    try {
+      const response = await fetch(`/api/recipes/${selectedRecipe.id}`, {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
       setRecipes(prev => prev.filter(r => r.id !== selectedRecipe.id))
       setShowDeleteModal(false)
       setSelectedRecipe(null)
+      }
+    } catch (error) {
+      console.error('Error deleting recipe:', error)
     }
   }
 
-  const toggleFavorite = (recipeId: string) => {
+  const toggleFavorite = async (recipeId: string) => {
+    const recipe = recipes.find(r => r.id === recipeId)
+    if (!recipe) return
+
+    try {
+      const response = await fetch(`/api/recipes/${recipeId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isFavorite: !recipe.isFavorite })
+      })
+
+      if (response.ok) {
     setRecipes(prev => prev.map(r => 
       r.id === recipeId ? { ...r, isFavorite: !r.isFavorite } : r
     ))
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error)
+    }
   }
 
   const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -464,14 +464,48 @@ export function RecetasSection() {
   }
 
   const formatTime = (minutes: number) => {
+    if (!minutes || minutes <= 0) return '0 min'
     if (minutes < 60) return `${minutes} min`
     const hours = Math.floor(minutes / 60)
     const mins = minutes % 60
     return mins > 0 ? `${hours}h ${mins}min` : `${hours}h`
   }
 
+  if (loading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-pink-500" />
+          <p className="text-gray-600">Cargando recetas...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="p-6 space-y-6">
+       {/* Notificación */}
+       {notification && (
+         <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg flex items-center gap-3 transition-all duration-300 ${
+           notification.type === 'success' 
+             ? 'bg-green-100 border border-green-300 text-green-800' 
+             : 'bg-red-100 border border-red-300 text-red-800'
+         }`}>
+           {notification.type === 'success' ? (
+             <CheckCircle2 className="h-5 w-5 text-green-600" />
+           ) : (
+             <XCircle className="h-5 w-5 text-red-600" />
+           )}
+           <span className="font-medium">{notification.message}</span>
+           <button
+             onClick={() => setNotification(null)}
+             className="ml-2 text-gray-500 hover:text-gray-700"
+           >
+             <X className="h-4 w-4" />
+           </button>
+         </div>
+       )}
+
       {/* Header */}
       <div className="text-center space-y-2">
         <h1 className="text-4xl font-bold text-gray-800 flex items-center justify-center gap-3">
@@ -502,7 +536,9 @@ export function RecetasSection() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-blue-600 font-medium">Tiempo Total</p>
-                <p className="text-2xl font-bold text-blue-700">{formatTime(stats.totalTime)}</p>
+                 <p className="text-2xl font-bold text-blue-700">
+                   {stats.totalTime > 0 ? formatTime(stats.totalTime) : '0 min'}
+                 </p>
               </div>
               <Timer className="h-8 w-8 text-blue-500" />
             </div>
@@ -514,7 +550,9 @@ export function RecetasSection() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-green-600 font-medium">Promedio</p>
-                <p className="text-2xl font-bold text-green-700">{stats.averageRating.toFixed(1)} ⭐</p>
+                 <p className="text-2xl font-bold text-green-700">
+                   {stats.averageRating > 0 ? `${stats.averageRating.toFixed(1)} ⭐` : 'Sin calificaciones'}
+                 </p>
               </div>
               <Star className="h-8 w-8 text-green-500" />
             </div>
@@ -596,9 +634,12 @@ export function RecetasSection() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <Card className={`hover:shadow-lg transition-all duration-200 cursor-pointer ${
+            <Card 
+              className={`hover:shadow-lg transition-all duration-200 cursor-pointer group ${
               recipe.isFavorite ? 'ring-2 ring-pink-200 bg-pink-50' : ''
-            }`}>
+              }`}
+              onClick={() => openInstructionsModal(recipe)}
+            >
               <CardContent className="p-4">
                 <div className="space-y-3">
                   {/* Imagen */}
@@ -682,7 +723,7 @@ export function RecetasSection() {
                     <div className="flex items-center gap-4 text-xs text-gray-500">
                       <div className="flex items-center gap-1">
                         <Clock className="h-3 w-3" />
-                        <span>{formatTime(recipe.prepTime + recipe.cookTime)}</span>
+                         <span>{formatTime(((recipe as any).prepTime || (recipe as any).prep_time || 0) + ((recipe as any).cookTime || (recipe as any).cook_time || 0))}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <Users className="h-3 w-3" />
@@ -709,6 +750,14 @@ export function RecetasSection() {
                         )}
                       </div>
                     )}
+
+                    {/* Indicador de instrucciones */}
+                    <div className="flex items-center justify-center pt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      <div className="flex items-center gap-1 text-xs text-pink-500 bg-pink-50 px-2 py-1 rounded-full border border-pink-200">
+                        <BookOpen className="h-3 w-3" />
+                        <span>Haz clic para ver instrucciones</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -1039,11 +1088,20 @@ export function RecetasSection() {
             </Button>
             <Button
               onClick={handleSaveRecipe}
-              disabled={!recipeForm.title || !recipeForm.description}
+              disabled={!recipeForm.title || !recipeForm.description || saving}
               className="bg-pink-500 hover:bg-pink-600"
             >
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                <>
               <Save className="h-4 w-4 mr-2" />
               Guardar
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1077,6 +1135,208 @@ export function RecetasSection() {
               Eliminar
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Instrucciones */}
+      <Dialog open={showInstructionsModal} onOpenChange={setShowInstructionsModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          {selectedRecipe && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-2xl">
+                  <BookOpen className="h-6 w-6 text-pink-500" />
+                  {selectedRecipe.title}
+                </DialogTitle>
+                <DialogDescription className="text-lg">
+                  {selectedRecipe.description}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-6">
+                {/* Información de la receta */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gradient-to-r from-pink-50 to-rose-50 rounded-lg">
+                                     <div className="flex items-center gap-2">
+                     <Clock className="h-5 w-5 text-pink-500" />
+                     <div>
+                       <p className="text-sm text-gray-600">Preparación</p>
+                       <p className="font-semibold">{formatTime((selectedRecipe as any).prepTime || (selectedRecipe as any).prep_time || 0)}</p>
+                     </div>
+                   </div>
+                   <div className="flex items-center gap-2">
+                     <Flame className="h-5 w-5 text-orange-500" />
+                     <div>
+                       <p className="text-sm text-gray-600">Cocción</p>
+                       <p className="font-semibold">{formatTime((selectedRecipe as any).cookTime || (selectedRecipe as any).cook_time || 0)}</p>
+                     </div>
+                   </div>
+                  <div className="flex items-center gap-2">
+                    <Users className="h-5 w-5 text-blue-500" />
+                    <div>
+                      <p className="text-sm text-gray-600">Porciones</p>
+                      <p className="font-semibold">{selectedRecipe.servings}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <ChefHatIcon className="h-5 w-5 text-green-500" />
+                    <div>
+                      <p className="text-sm text-gray-600">Dificultad</p>
+                      <p className="font-semibold capitalize">{selectedRecipe.difficulty}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Imágenes */}
+                {selectedRecipe.images && selectedRecipe.images.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      <Camera className="h-5 w-5 text-pink-500" />
+                      Galería de Imágenes
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {selectedRecipe.images.map((image, index) => (
+                        <div key={index} className="relative group">
+                          <AspectRatio ratio={1} className="rounded-lg overflow-hidden">
+                            <img 
+                              src={image} 
+                              alt={`${selectedRecipe.title} - Imagen ${index + 1}`}
+                              className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                            />
+                          </AspectRatio>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Ingredientes */}
+                <div className="space-y-3">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Utensils className="h-5 w-5 text-pink-500" />
+                    Ingredientes
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {selectedRecipe.ingredients.map((ingredient, index) => (
+                      <div key={index} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
+                        <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                        <span className="text-gray-700">{ingredient}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Instrucciones */}
+                <div className="space-y-3">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <BookOpen className="h-5 w-5 text-pink-500" />
+                    Instrucciones
+                  </h3>
+                  <div className="space-y-3">
+                    {selectedRecipe.instructions.map((instruction, index) => (
+                      <div key={index} className="flex gap-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg">
+                        <div className="flex-shrink-0 w-8 h-8 bg-pink-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                          {index + 1}
+                        </div>
+                        <p className="text-gray-700 leading-relaxed">{instruction}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tips */}
+                {selectedRecipe.tips && (
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      <Lightbulb className="h-5 w-5 text-yellow-500" />
+                      Consejos del Chef
+                    </h3>
+                    <div className="p-4 bg-gradient-to-r from-yellow-50 to-amber-50 rounded-lg border-l-4 border-yellow-400">
+                      <p className="text-gray-700 italic">💡 {selectedRecipe.tips}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Información adicional */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      <Star className="h-5 w-5 text-yellow-500" />
+                      Información
+                    </h3>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-600">Categoría:</span>
+                        <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+                          {getCategoryIcon(selectedRecipe.category)} {categories.find(c => c.value === selectedRecipe.category)?.label}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-600">Cocina:</span>
+                        <Badge className="bg-green-100 text-green-800 border-green-200">
+                          {getCuisineIcon(selectedRecipe.cuisine)} {cuisines.find(c => c.value === selectedRecipe.cuisine)?.label}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-600">Autor:</span>
+                        <Badge className="bg-purple-100 text-purple-800 border-purple-200">
+                          {selectedRecipe.author === 'yo' ? 'Yo' : selectedRecipe.author === 'pareja' ? 'Mi pareja' : 'Ambos'}
+                        </Badge>
+                      </div>
+                      {selectedRecipe.rating && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-600">Calificación:</span>
+                          <div className="flex items-center gap-1">
+                            {[...Array(5)].map((_, i) => (
+                              <Star 
+                                key={i} 
+                                className={`h-4 w-4 ${i < selectedRecipe.rating! ? 'fill-current text-yellow-400' : 'text-gray-300'}`} 
+                              />
+                            ))}
+                            <span className="text-sm text-gray-500 ml-1">({selectedRecipe.rating})</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {selectedRecipe.tags.length > 0 && (
+                    <div className="space-y-3">
+                      <h3 className="text-lg font-semibold flex items-center gap-2">
+                        <BookOpen className="h-5 w-5 text-pink-500" />
+                        Etiquetas
+                      </h3>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedRecipe.tags.map(tag => (
+                          <Badge key={tag} variant="outline" className="bg-pink-50 text-pink-700 border-pink-200">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowInstructionsModal(false)}
+                >
+                  Cerrar
+                </Button>
+                <Button
+                  onClick={() => {
+                    setShowInstructionsModal(false)
+                    openEditModal(selectedRecipe)
+                  }}
+                  className="bg-pink-500 hover:bg-pink-600"
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Editar Receta
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>
