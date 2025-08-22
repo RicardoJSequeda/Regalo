@@ -38,9 +38,9 @@ export function Dashboard({ onLogout, onToggleDarkMode, isDarkMode }: DashboardP
         isDarkMode={isDarkMode}
       />
 
-      {/* Contenido principal */}
+      {/* Contenido principal - Mejorado para móvil */}
       <main className="flex-1 lg:ml-72">
-        <div className="p-6">
+        <div className="p-3 sm:p-4 md:p-6">
           <ContentSection section={activeSection} />
         </div>
       </main>

@@ -98,6 +98,100 @@
     color-scheme: dark;
   }
 
+  /* Pinterest-style masonry layout optimized for mobile photos */
+  .masonry-grid {
+    column-count: 2;
+    column-gap: 0.75rem;
+    break-inside: avoid;
+  }
+
+  @media (min-width: 640px) {
+    .masonry-grid {
+      column-count: 3;
+      column-gap: 1rem;
+    }
+  }
+
+  @media (min-width: 768px) {
+    .masonry-grid {
+      column-count: 4;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .masonry-grid {
+      column-count: 5;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .masonry-grid {
+      column-count: 6;
+    }
+  }
+
+  .masonry-item {
+    break-inside: avoid;
+    margin-bottom: 0.75rem;
+    display: block;
+  }
+
+  /* Optimized for mobile photos (vertical/selfie format) */
+  .photo-card {
+    border-radius: 16px;
+    overflow: hidden;
+    background: white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+  }
+
+  .photo-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  /* Ensure images maintain aspect ratio and fill container properly */
+  .photo-card img,
+  .photo-card video {
+    width: 100%;
+    height: auto;
+    display: block;
+    object-fit: cover;
+    border-radius: 16px;
+    transition: transform 0.2s ease;
+  }
+
+  /* Specific styles for videos in the grid */
+  .photo-card video {
+    background: #f8f9fa;
+    min-height: 200px;
+    max-height: 400px;
+    pointer-events: none; /* Evita interacciones accidentales */
+  }
+
+  /* Video thumbnail optimization */
+  .photo-card video[preload="metadata"] {
+    background: linear-gradient(45deg, #f8f9fa, #e9ecef);
+  }
+
+  .dark .photo-card video[preload="metadata"] {
+    background: linear-gradient(45deg, #2a2a2a, #1a1a1a);
+  }
+
+  /* Hacer que los videos se vean como imágenes estáticas */
+  .photo-card video {
+    object-fit: cover;
+    object-position: center;
+  }
+
+
+
+  /* Backdrop blur for overlays */
+  .backdrop-blur-sm {
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
   .dark body {
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
@@ -1560,4 +1654,323 @@
 
 .modal-content {
   animation: fadeInUp 0.3s ease-out;
+}
+
+/* ===== ESTILOS ESPECÍFICOS PARA MÓVIL ===== */
+
+/* Mejoras para dispositivos móviles */
+@media (max-width: 640px) {
+  /* Ajustes generales para móvil */
+  .mobile-optimized {
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  
+  /* Mejorar la legibilidad en móvil */
+  .mobile-text {
+    font-size: 16px; /* Prevenir zoom en iOS */
+    line-height: 1.5;
+  }
+  
+  /* Botones más grandes para touch */
+  .mobile-button {
+    min-height: 44px;
+    padding: 12px 16px;
+    font-size: 16px;
+  }
+  
+  /* Cards más compactas en móvil */
+  .mobile-card {
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  
+  /* Grid responsivo para móvil */
+  .mobile-grid {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px;
+  }
+  
+  /* Navegación móvil mejorada */
+  .mobile-nav {
+    padding: 12px;
+  }
+  
+  .mobile-nav-item {
+    padding: 12px 16px;
+    font-size: 16px;
+    min-height: 48px;
+  }
+  
+  /* Controles de carrusel más grandes */
+  .mobile-carousel-control {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+  }
+  
+  /* Inputs más grandes para móvil */
+  .mobile-input {
+    font-size: 16px;
+    padding: 12px 16px;
+    min-height: 48px;
+  }
+  
+  /* Modales más grandes en móvil */
+  .mobile-modal {
+    margin: 16px;
+    max-height: calc(100vh - 32px);
+  }
+  
+  /* Mejorar scroll en móvil */
+  .mobile-scroll {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+  
+  /* Optimizar imágenes para móvil */
+  .mobile-image {
+    max-width: 100%;
+    height: auto;
+    object-fit: cover;
+  }
+  
+  /* Mejorar espaciado en móvil */
+  .mobile-spacing {
+    margin: 8px 0;
+    padding: 8px 0;
+  }
+  
+  /* Contador de tiempo optimizado para móvil */
+  .mobile-counter {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  
+  .mobile-counter-item {
+    font-size: 18px;
+    padding: 8px 4px;
+  }
+  
+  /* Stats cards optimizadas para móvil */
+  .mobile-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  
+  .mobile-stats-card {
+    padding: 12px;
+    font-size: 14px;
+  }
+  
+  /* Mejorar la navegación del sidebar móvil */
+  .mobile-sidebar {
+    width: 100%;
+    max-width: 320px;
+  }
+  
+  .mobile-sidebar-header {
+    padding: 16px;
+  }
+  
+  .mobile-sidebar-nav {
+    padding: 8px 16px;
+  }
+  
+  .mobile-sidebar-item {
+    padding: 12px 16px;
+    margin: 4px 0;
+    border-radius: 8px;
+  }
+  
+  /* Botón de menú móvil mejorado */
+  .mobile-menu-button {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 1000;
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+  
+  /* Mejorar la experiencia de touch */
+  .mobile-touch-target {
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  /* Optimizar formularios para móvil */
+  .mobile-form {
+    padding: 16px;
+  }
+  
+  .mobile-form-group {
+    margin-bottom: 16px;
+  }
+  
+  .mobile-form-label {
+    font-size: 16px;
+    margin-bottom: 8px;
+    font-weight: 500;
+  }
+  
+  .mobile-form-input {
+    width: 100%;
+    font-size: 16px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    border: 1px solid #d1d5db;
+    background: white;
+  }
+  
+  .mobile-form-input:focus {
+    outline: none;
+    border-color: #ec4899;
+    box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.1);
+  }
+  
+  /* Mejorar botones de acción en móvil */
+  .mobile-action-button {
+    width: 100%;
+    padding: 16px;
+    font-size: 16px;
+    font-weight: 600;
+    border-radius: 12px;
+    border: none;
+    background: linear-gradient(135deg, #ec4899, #8b5cf6);
+    color: white;
+    box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3);
+    transition: all 0.3s ease;
+  }
+  
+  .mobile-action-button:active {
+    transform: scale(0.98);
+    box-shadow: 0 2px 8px rgba(236, 72, 153, 0.4);
+  }
+  
+  /* Optimizar cards para móvil */
+  .mobile-card-header {
+    padding: 16px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  
+  .mobile-card-content {
+    padding: 16px;
+  }
+  
+  .mobile-card-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  
+  .mobile-card-description {
+    font-size: 14px;
+    color: #6b7280;
+    line-height: 1.5;
+  }
+  
+  /* Mejorar la experiencia de scroll en móvil */
+  .mobile-scroll-container {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  
+  /* Optimizar imágenes y media para móvil */
+  .mobile-media {
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    object-fit: cover;
+  }
+  
+  /* Mejorar la accesibilidad en móvil */
+  .mobile-focus-visible {
+    outline: 2px solid #ec4899;
+    outline-offset: 2px;
+  }
+  
+  /* Optimizar animaciones para móvil */
+  .mobile-animation {
+    transition: all 0.2s ease;
+  }
+  
+  /* Mejorar la experiencia de carga en móvil */
+  .mobile-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    font-size: 16px;
+    color: #6b7280;
+  }
+  
+  /* Optimizar modales para móvil */
+  .mobile-modal-overlay {
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(4px);
+  }
+  
+  .mobile-modal-content {
+    margin: 16px;
+    border-radius: 12px;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+  }
+}
+
+/* Mejoras específicas para tablets */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .tablet-optimized {
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  
+  .tablet-grid {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+  }
+  
+  .tablet-card {
+    padding: 20px;
+  }
+  
+  .tablet-button {
+    min-height: 48px;
+    padding: 14px 20px;
+    font-size: 16px;
+  }
+}
+
+/* Mejoras para pantallas grandes */
+@media (min-width: 1025px) {
+  .desktop-optimized {
+    font-size: 18px;
+    line-height: 1.6;
+  }
+  
+  .desktop-grid {
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 24px;
+  }
+  
+  .desktop-card {
+    padding: 24px;
+  }
+  
+  .desktop-button {
+    min-height: 52px;
+    padding: 16px 24px;
+    font-size: 18px;
+  }
 }

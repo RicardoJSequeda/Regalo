@@ -25,11 +25,125 @@ export interface NavigationItem {
 
 // Tipos de recuerdos
 export interface Memory {
-  id: number
+  id: string
   title: string
-  date: string
+  description?: string
+  image_url?: string
+  date_taken?: string
+  type: 'aniversario' | 'viajes' | 'eventos' | 'otros'
+  location?: string
+  coordinates?: { x: number; y: number }
+  tags: string[]
+  is_favorite: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Milestone {
+  id: string
+  title: string
+  description?: string
+  image_url?: string
+  date_taken: string
+  type: 'aniversario' | 'viajes' | 'eventos' | 'otros'
+  location?: string
+  coordinates?: { x: number; y: number }
+  tags: string[]
+  is_favorite: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface MemoryPlace {
+  id: string
+  name: string
+  address?: string
+  lat?: number
+  lng?: number
+  type: 'parque' | 'restaurante' | 'playa' | 'ciudad' | 'museo' | 'teatro' | 'café' | 'bar' | 'club' | 'gimnasio' | 'otro'
+  status: 'visitado' | 'pendiente'
+  visit_date?: string
+  description?: string
+  image_url?: string
+  tags: string[]
+  is_favorite: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Curiosity {
+  id: string
+  text: string
+  category?: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+// Tipos de sorpresas
+export interface SurpriseContent {
+  type: 'text' | 'image' | 'video' | 'invitation' | 'event' | 'mixed'
+  title: string
   description: string
-  image: string
+  content: string
+  imageUrl?: string
+  videoUrl?: string
+  eventDate?: string
+  eventLocation?: string
+  eventMapLink?: string
+  blocks?: Array<{
+    type: 'text' | 'image' | 'video'
+    content: string
+    order: number
+  }>
+}
+
+export interface SurpriseBox {
+  id: string
+  title: string
+  description: string
+  coverImage?: string
+  category: 'foto' | 'texto' | 'invitacion' | 'evento' | 'mixto'
+  isUnlocked: boolean
+  unlockType: 'key' | 'date' | 'sequential' | 'free'
+  unlockDate?: string
+  unlockTime?: string
+  requiredKey?: string
+  dependsOn?: string
+  sequentialOrder?: number
+  content: SurpriseContent
+  createdAt: string
+  unlockedAt?: string
+  order: number
+  effects?: {
+    confetti?: boolean
+    sound?: string
+    animation?: string
+  }
+  previewMessage?: string
+  achievements?: string[]
+  updatedAt?: string
+}
+
+export interface SurpriseAchievement {
+  id: string
+  title: string
+  description: string
+  icon: string
+  unlockedAt?: string
+  requirement: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface UnlockProgress {
+  id: string
+  surpriseId: string
+  attemptedAt: string
+  attemptType: 'key' | 'date' | 'sequential'
+  wasSuccessful: boolean
+  attemptedKey?: string
+  createdAt: string
 }
 
 // Tipos de línea de tiempo
@@ -86,18 +200,21 @@ export interface Song {
   image: string
 }
 
-// Tipos de fotos
+// Tipos de fotos y videos
 export interface Photo {
-  id: number
+  id: string
   title: string
-  date: string
-  description: string
-  image: string
+  description?: string
+  image_url: string
+  thumbnail_url?: string
+  file_type: 'image' | 'video' | 'gif'
+  category: 'romantico' | 'familia' | 'amigos' | 'viajes' | 'eventos' | 'mascotas' | 'comida' | 'naturaleza' | 'arte' | 'otro'
   tags: string[]
-  type: 'photo' | 'video'
-  size?: number
-  createdAt: string
-  updatedAt: string
+  location?: string
+  date_taken?: string
+  favorite: boolean
+  created_at: string
+  updated_at: string
 }
 
 // Tipos de planes
